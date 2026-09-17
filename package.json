@@ -18,6 +18,7 @@
     "db:local:status": "bash scripts/local-postgres.sh status",
     "seed": "tsx apps/indexer/src/seed.ts",
     "seed:dry": "tsx apps/indexer/src/seed.ts --dry-run",
+    "estimate": "tsx apps/indexer/src/estimate.ts",
     "indexer": "tsx apps/indexer/src/index.ts",
     "lint": "oxlint app packages apps tests drizzle.config.ts vitest.config.ts",
     "format": "oxfmt"

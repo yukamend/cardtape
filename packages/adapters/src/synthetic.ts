@@ -168,6 +168,13 @@ function createAccounts(random: Random, seed: string, startsAt: Date, endsAt: Da
       tier: index % 8 === 0 ? 'pinnacle' : 'luxe',
       qualifiedBy: index % 3 === 0 ? 'liquid' : 'sethfi',
     });
+    if (index % 3 === 0) {
+      account.transitions.push({
+        at: addDays(iphone.endsAt, 5 + (index % 23)),
+        tier: 'core',
+        qualifiedBy: 'unknown',
+      });
+    }
   }
   for (const account of accounts) normalizeTransitions(account);
   return accounts;
@@ -182,9 +189,14 @@ function createTierFacts(accounts: readonly SyntheticAccount[], seed: string): {
     account.transitions.forEach((transition, index) => {
       const next = account.transitions[index + 1];
       periods.push({ programId: PROGRAM_ID, cardAccount: account.address, tier: transition.tier, validFrom: transition.at, validTo: next?.at ?? null, qualifiedBy: transition.qualifiedBy });
-      if (index === 0 || transition.tier === 'core') return;
-      const isLiquid = transition.qualifiedBy === 'liquid';
-      const amount = transition.tier === 'pinnacle' ? 150_000 : transition.tier === 'vip' ? 500_000 : 30_000;
+      if (index === 0) return;
+      const previous = account.transitions[index - 1];
+      if (!previous) return;
+      const isDowngrade = transition.tier === 'core';
+      const qualification = isDowngrade ? previous.qualifiedBy : transition.qualifiedBy;
+      const affectedTier = isDowngrade ? previous.tier : transition.tier;
+      const isLiquid = qualification === 'liquid';
+      const amount = affectedTier === 'pinnacle' ? 150_000 : affectedTier === 'vip' ? 500_000 : 30_000;
       events.push({
         chainId: 10,
         txHash: transactionHash(seed, transactionIndex),
@@ -193,7 +205,7 @@ function createTierFacts(accounts: readonly SyntheticAccount[], seed: string): {
         blockTime: transition.at,
         programId: PROGRAM_ID,
         cardAccount: account.address,
-        action: isLiquid ? 'deposit' : 'stake',
+        action: isDowngrade ? (isLiquid ? 'withdraw' : 'unstake') : (isLiquid ? 'deposit' : 'stake'),
         asset: isLiquid ? 'LIQUID' : 'ETHFI',
         amountRaw: usdToRaw(amount, 18),
         provenance: 'demo',
@@ -359,7 +371,7 @@ function createCampaignResults(groundTruth: readonly InjectedCampaignGroundTruth
       { campaignId: truth.campaignId, metric: 'injected_incremental_transactions', value: String(truth.incrementalTransactions), ciLow: null, ciHigh: null, provenance: 'demo', methodNote: 'Known synthetic ground truth. This is a test fixture, not an estimate from real activity.', computedAt },
       { campaignId: truth.campaignId, metric: 'injected_incremental_volume_usd', value: truth.incrementalVolumeUsd, ciLow: null, ciHigh: null, provenance: 'demo', methodNote: 'Known synthetic ground truth, denominated in derived USD.', computedAt },
       { campaignId: truth.campaignId, metric: 'signature_transactions', value: String(truth.qualifyingSignatureTransactions), ciLow: null, ciHigh: null, provenance: 'demo', methodNote: campaign.signature.note, computedAt },
-      { campaignId: truth.campaignId, metric: 'cashback_cost_usd', value: truth.cashbackCostUsd, ciLow: null, ciHigh: null, provenance: 'demo', methodNote: 'Synthetic cashback disbursement total used to verify the cost pipeline.', computedAt },
+      { campaignId: truth.campaignId, metric: 'injected_cashback_cost_usd', value: truth.cashbackCostUsd, ciLow: null, ciHigh: null, provenance: 'demo', methodNote: 'Known synthetic cashback ground truth used to verify the measured cost pipeline.', computedAt },
     );
   }
   return results;

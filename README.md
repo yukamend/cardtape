@@ -1,6 +1,6 @@
 # CARDTAPE
 
-CARDTAPE is a crypto-card campaign effectiveness terminal. The current local foundation covers one program, ether.fi Cash, with a versioned campaign registry, append-only settlement facts, retrospective tier intervals, deterministic synthetic history, and database-enforced provenance.
+CARDTAPE is a crypto-card campaign effectiveness terminal. The current local implementation covers one program, ether.fi Cash, with a versioned campaign registry, append-only settlement facts, retrospective tier intervals, deterministic synthetic history, database-enforced provenance, and verified campaign estimators.
 
 All generated fixture rows carry `provenance = 'demo'`. They are test data, not claims about live card activity.
 
@@ -14,6 +14,7 @@ npm install
 npm run db:local:start
 npm run db:migrate
 npm run seed
+npm run estimate
 npm run dev
 ```
 
@@ -31,7 +32,7 @@ With local Postgres running, `npm test` also executes the database integration t
 
 ## Data layout
 
-- `packages/core` — domain types, hand-curated campaign registry, tier ladder, money and interval rules.
+- `packages/core` — domain types, campaign registry, tier ladder, interval rules, and pure estimators.
 - `packages/db` — Drizzle schema, migrations, database client, and idempotent write paths.
 - `packages/adapters` — deterministic 18-month synthetic source with known campaign effects.
 - `apps/indexer` — migration, seed, and indexer entry points.
@@ -47,6 +48,18 @@ With local Postgres running, `npm test` also executes the database integration t
 - Tier membership is an interval, not a mutable current-state field. PostgreSQL rejects overlaps.
 - Settlement currency remains a first-class dimension; derived USD may be `NULL` and is never replaced with zero.
 
+## Estimator gate
+
+The synthetic source injects known campaign effects. CI verifies that:
+
+- the difference-in-differences interval contains the injected iPhone campaign volume;
+- a campaign-free placebo interval contains zero;
+- the incentivized ticket-size signature is detected;
+- persistence and post-window unstake cohorts are observable; and
+- the token event study estimates beta outside the event window.
+
+Estimator definitions and assumptions are recorded in `docs/estimators.md`.
+
 ## Deliberately deferred
 
-The OP Mainnet adapter, live WebSocket fan-out, and causal estimators belong to later phases. The current work establishes and verifies the storage and synthetic-ground-truth layer they depend on.
+The live WebSocket tape and OP Mainnet adapter belong to later phases. The current site remains explicit demo data until those live inputs are independently verified.

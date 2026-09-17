@@ -21,8 +21,9 @@
 - `npm run db:migrate` — apply versioned migrations.
 - `npm run seed` — generate and idempotently load the 18-month fixture.
 - `npm run seed:dry` — generate without a database.
+- `npm run estimate` — recompute every campaign result from immutable database facts.
 - `npm run typecheck` — strict TypeScript check.
 - `npm test` — unit tests; includes Postgres integration when `DATABASE_URL` is set.
 - `npm run build` — production web build.
 
-Do not add live adapters, estimators, extra programs, accounts, alerts, or other surfaces while working on the data-foundation phase.
+Do not add live adapters, extra programs, accounts, alerts, or unrelated surfaces before the estimator layer and its synthetic gates remain green.
