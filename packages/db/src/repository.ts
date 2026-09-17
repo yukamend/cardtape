@@ -1,6 +1,8 @@
+import { sql } from 'drizzle-orm';
 import type { Campaign, CampaignResult, Cursor, MarketPrice, SpendEvent, TierEvent, TierPeriod } from '../../core/src/types';
 import type { Database } from './client';
 import { campaign, campaignResult, ingestCursor, marketPrice, spendEvent, tierEvent, tierPeriod } from './schema';
+import { SPEND_EVENT_CHANNEL, spendEventNotification } from './tape';
 
 const BATCH_SIZE = 1_000;
 
@@ -75,8 +77,15 @@ export async function insertSpendEvents(db: Database, rows: readonly SpendEvent[
 export async function ingestSpendBatch(db: Database, sourceId: string, rows: readonly SpendEvent[], cursor: Cursor): Promise<number> {
   return db.transaction(async (transaction) => {
     let inserted = 0;
+    const insertedEvents: SpendEvent[] = [];
     for (const batch of batches(deduplicateSpendEvents(rows))) {
-      const result = await transaction.insert(spendEvent).values(spendValues(batch)).onConflictDoNothing().returning({ txHash: spendEvent.txHash });
+      const result = await transaction.insert(spendEvent).values(spendValues(batch)).onConflictDoNothing().returning({
+        chainId: spendEvent.chainId,
+        txHash: spendEvent.txHash,
+        logIndex: spendEvent.logIndex,
+      });
+      const insertedKeys = new Set(result.map((row) => `${row.chainId}:${row.txHash}:${row.logIndex}`));
+      insertedEvents.push(...batch.filter((row) => insertedKeys.has(spendEventKey(row))));
       inserted += result.length;
     }
     await transaction.insert(ingestCursor).values({
@@ -88,6 +97,13 @@ export async function ingestSpendBatch(db: Database, sourceId: string, rows: rea
       target: ingestCursor.sourceId,
       set: { blockNumber: cursor.blockNumber, blockHash: cursor.blockHash, updatedAt: new Date() },
     });
+    if (insertedEvents.length > 0) {
+      const payloads = JSON.stringify(insertedEvents.map(spendEventNotification));
+      await transaction.execute(sql`
+        SELECT pg_notify(${SPEND_EVENT_CHANNEL}, payload.value::text)
+        FROM jsonb_array_elements(${payloads}::jsonb) AS payload(value)
+      `);
+    }
     return inserted;
   });
 }

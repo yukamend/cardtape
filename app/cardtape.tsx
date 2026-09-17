@@ -2,19 +2,17 @@
 
 /* oxlint-disable jsx-a11y/prefer-tag-over-role, jsx-a11y/no-interactive-element-to-noninteractive-role */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { memo, useEffect, useState, type ReactNode } from 'react';
+import type { TapeEvent } from '../packages/core/src/tape';
+import { useTapeFeed, type TapeFeed } from './use-tape-feed';
 
 type View = 'campaigns' | 'tape' | 'baseline' | 'tiers' | 'methodology' | 'detail';
 type Provenance = 'measured' | 'inferred' | 'estimated' | 'demo';
 
 const campaigns = [
-  { id:'iphone', status:'LIVE', name:'IPHONE 18 PRE-ORDER', short:'IPHONE 18', window:'SEP 12—18', mechanic:'CASHBACK LOTTERY', tiers:'LUXE · PINNACLE · VIP', budget:'$100,000', lift:'+31.8%', cost:'PENDING', retention:'TRACKING', source:'ETHER.FI / EVENTS / IPHONE 18' },
-  { id:'lunar', status:'SETTLED', name:'LUNAR NEW YEAR 2026', short:'LUNAR NEW YEAR', window:'FEB 08—28', mechanic:'REFERRAL CASHBACK', tiers:'NEW · APAC', budget:'$20,000', lift:'+18.4%', cost:'$16,842', retention:'41.2%', source:'ETHER.FI / EVENTS / LUNAR NEW YEAR' },
-  { id:'membership', status:'SETTLED', name:'MEMBERSHIP REWARDS', short:'MEMBERSHIP REWARDS', window:'JUN—AUG 25', mechanic:'TIER CASHBACK', tiers:'CORE → VIP', budget:'VARIABLE', lift:'—', cost:'$48,320', retention:'36.7%', source:'ETHER.FI / EVENTS / MEMBERSHIP REWARDS' },
-] as const;
-
-const tapeRows = [
-  ['08:42:16','+$1,284.50','USDC','OP','0x8f…a1c4','SIGNATURE'],['08:41:58','+$86.20','USDC','OP','0xd2…93be','SPEND'],['08:41:21','+$1,099.00','USDC','OP','0x71…08af','SIGNATURE'],['08:40:46','+$242.84','USDT','OP','0xe6…b310','SPEND'],['08:40:03','+$1,798.20','USDC','OP','0x09…8cc2','SIGNATURE'],['08:39:41','+$54.72','USDC','OP','0xb4…22d1','SPEND'],['08:38:17','+$684.00','USDC','OP','0xc8…700f','SPEND'],['08:37:42','+$2,000.00','USDC','OP','0x33…de49','SIGNATURE'],['08:37:01','+$119.29','USDC','OP','0x5a…90bf','SPEND'],['08:36:26','+$38.40','USDT','OP','0x92…c810','SPEND'],['08:35:58','+$1,049.99','USDC','OP','0xa7…11e2','SIGNATURE'],['08:34:47','+$71.16','USDC','OP','0x1d…cb66','SPEND'],
+  { id:'iphone', registryId:'etherfi-iphone18-preorder', status:'LIVE', name:'IPHONE 18 PRE-ORDER', short:'IPHONE 18', window:'SEP 12—18', mechanic:'CASHBACK LOTTERY', tiers:'LUXE · PINNACLE · VIP', budget:'$100,000', lift:'+31.8%', cost:'PENDING', retention:'TRACKING', source:'ETHER.FI / EVENTS / IPHONE 18' },
+  { id:'lunar', registryId:'etherfi-lunar-new-year-2026', status:'SETTLED', name:'LUNAR NEW YEAR 2026', short:'LUNAR NEW YEAR', window:'FEB 08—28', mechanic:'REFERRAL CASHBACK', tiers:'NEW · APAC', budget:'$20,000', lift:'+18.4%', cost:'$16,842', retention:'41.2%', source:'ETHER.FI / EVENTS / LUNAR NEW YEAR' },
+  { id:'membership', registryId:'etherfi-membership-rewards-2025', status:'SETTLED', name:'MEMBERSHIP REWARDS', short:'MEMBERSHIP REWARDS', window:'JUN—AUG 25', mechanic:'TIER CASHBACK', tiers:'CORE → VIP', budget:'VARIABLE', lift:'—', cost:'$48,320', retention:'36.7%', source:'ETHER.FI / EVENTS / MEMBERSHIP REWARDS' },
 ] as const;
 
 const tiers = [
@@ -31,6 +29,7 @@ export default function Cardtape() {
   const [paused,setPaused] = useState(false);
   const [selectedCampaign,setSelectedCampaign] = useState('iphone');
   const [rightOpen,setRightOpen] = useState(true);
+  const tape = useTapeFeed(paused);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -50,15 +49,15 @@ export default function Cardtape() {
       <button className="wordmark" onClick={() => setView('campaigns')}>CARDTAPE<span className="version">/0.1</span></button>
       <div className="ticker"><span>ETHFI</span><b>$0.7421</b><i>+2.81%</i><span className="ticker-sep">BTC</span><b>$108,420</b><i>+0.64%</i></div>
       <nav className="windows" aria-label="Time window">{['1H','24H','7D','30D','ALL'].map((item)=><button key={item} className={item===windowRange?'active':''} onClick={()=>setWindowRange(item)}>{item}</button>)}</nav>
-      <div className="header-actions"><button aria-label={paused?'Resume tape':'Pause tape'} onClick={()=>setPaused(!paused)}>{paused?'RESUME':'PAUSE'}</button><button aria-label="Print screenshot mode" onClick={()=>window.print()}>[S]</button><span className="live"><span className="live-dot"/>LIVE · OP</span></div>
+      <div className="header-actions"><button aria-label={paused?'Resume tape':'Pause tape'} onClick={()=>setPaused(!paused)}>{paused?'RESUME':'PAUSE'}</button><button aria-label="Print screenshot mode" onClick={()=>window.print()}>[S]</button><span className={`live ${tape.connection==='connected'?'':'offline'}`}><span className="live-dot"/>{tape.connection==='connected'?'WS · OP':'WS · OFFLINE'}</span></div>
     </header>
     <div className="demo-banner">DEMO DATA · SYNTHETIC SETTLEMENTS · VALUES ARE NOT CLAIMS ABOUT LIVE ACTIVITY</div>
     <div className={`workspace ${rightOpen?'':'right-closed'}`}>
       <LeftRail view={view} setView={setView} openCampaign={openCampaign} selectedCampaign={selectedCampaign}/>
       <section className="main-panel">
-        {view==='campaigns' && <CampaignIndex onOpen={openCampaign} currency={currency} setCurrency={setCurrency}/>} 
-        {view==='detail' && <CampaignDetail campaign={selected} onBack={()=>setView('campaigns')} currency={currency} setCurrency={setCurrency}/>} 
-        {view==='tape' && <TapeView paused={paused} setPaused={setPaused}/>} 
+        {view==='campaigns' && <CampaignIndex onOpen={openCampaign} currency={currency} setCurrency={setCurrency} tape={tape}/>}
+        {view==='detail' && <CampaignDetail campaign={selected} onBack={()=>setView('campaigns')} currency={currency} setCurrency={setCurrency} tape={tape}/>}
+        {view==='tape' && <TapeView paused={paused} setPaused={setPaused} tape={tape}/>}
         {view==='baseline' && <BaselineView currency={currency} setCurrency={setCurrency}/>} 
         {view==='tiers' && <TierView/>}
         {view==='methodology' && <MethodologyView/>}
@@ -66,7 +65,7 @@ export default function Cardtape() {
       {rightOpen && <ContextRail campaign={selected} onOpen={()=>openCampaign(selected.id)} onClose={()=>setRightOpen(false)}/>} 
       {!rightOpen && <button className="rail-reopen" onClick={()=>setRightOpen(true)} aria-label="Open context panel">‹</button>}
     </div>
-    <Footer/>
+    <Footer tape={tape}/>
   </main>;
 }
 
@@ -75,18 +74,19 @@ function LeftRail({view,setView,openCampaign,selectedCampaign}:{view:View;setVie
   return <aside className="left-rail"><div className="rail-label">VIEWS</div>{nav.map(([id,label],index)=><button key={id} className={(view===id||(view==='detail'&&id==='campaigns'))?'selected':''} onClick={()=>setView(id)}><span>0{index+1}</span>{label}</button>)}<div className="rail-label campaigns-label">CAMPAIGNS / 03</div>{campaigns.map((campaign)=><button key={campaign.id} className={`campaign-link ${selectedCampaign===campaign.id&&view==='detail'?'selected':''}`} onClick={()=>openCampaign(campaign.id)}>{campaign.status==='LIVE'&&<span className="live-dot"/>}{campaign.short}</button>)}</aside>;
 }
 
-function CampaignIndex({onOpen,currency,setCurrency}:{onOpen:(id:string)=>void;currency:string;setCurrency:(value:string)=>void}) {
+function CampaignIndex({onOpen,currency,setCurrency,tape}:{onOpen:(id:string)=>void;currency:string;setCurrency:(value:string)=>void;tape:TapeFeed}) {
+  const signatureCount = tape.rows.filter((event) => event.signatureCampaignIds.length > 0).length;
   return <>
     <PageHeading eyebrow="ETHER.FI CASH / CAMPAIGN INDEX" title="EVERY PROMO. WHAT IT MOVED. WHAT IT COST." meta={<>AS OF 2026-09-17 08:42:16 UTC<br/><span>6,284 SETTLEMENTS / 7D</span></>}/>
     <div className="control-line"><span>PROGRAM <b>ETHER.FI CASH</b></span><Denomination value={currency} setValue={setCurrency}/></div>
     <div className="stat-grid"><Stat label="ACTIVE CAMPAIGNS" value="01" note="CLOSES IN 1D 15H" provenance="demo" live/><Stat label="SPEND / 7D" value="$1.84M" note="SETTLEMENTS" provenance="measured"/><Stat label="ACTIVE CARDS / 7D" value="2,418" note="UNIQUE ACCOUNTS" provenance="measured"/><Stat label="MEDIAN TICKET" value="$84.20" note="SETTLEMENT VALUE" provenance="measured"/></div>
     <div className="table-title"><span>CAMPAIGN LEAGUE TABLE</span><span>SELECT A ROW FOR FULL READOUT ↗</span></div>
     <div className="campaign-table" role="table" aria-label="Campaign performance"><div className="table-row table-head" role="row"><span>STATE</span><span>CAMPAIGN</span><span>WINDOW</span><span>MECHANIC</span><span>ELIGIBLE</span><span>BUDGET</span><span>LIFT</span><span>COST</span><span>12W PERSIST.</span></div>{campaigns.map((campaign)=><button className="table-row" role="row" key={campaign.id} onClick={()=>onOpen(campaign.id)}><span className={campaign.status==='LIVE'?'status-live':'status'}>{campaign.status==='LIVE'&&<span className="live-dot"/>}{campaign.status}</span><strong>{campaign.name}</strong><span>{campaign.window}</span><span>{campaign.mechanic}</span><span>{campaign.tiers}</span><span className="num">{campaign.budget}</span><span className={`num ${campaign.lift==='—'?'muted':'positive'}`}>{campaign.lift==='—'?'— NO EFFECT':campaign.lift}</span><span className="num">{campaign.cost}</span><span className="num">{campaign.retention}</span></button>)}</div>
-    <div className="bottom-grid"><Panel title="SETTLEMENT VOLUME / 7D" meta={currency}><LineChart/></Panel><Panel title="LIVE TAPE" meta="5 SIGNATURE MATCHES"><TapeExcerpt limit={5}/></Panel></div>
+    <div className="bottom-grid"><Panel title="SETTLEMENT VOLUME / 7D" meta={currency}><LineChart/></Panel><Panel title="LIVE TAPE" meta={`${signatureCount} SIGNATURE MATCHES`}><TapeExcerpt rows={tape.rows} limit={5}/></Panel></div>
   </>;
 }
 
-function CampaignDetail({campaign,onBack,currency,setCurrency}:{campaign:(typeof campaigns)[number];onBack:()=>void;currency:string;setCurrency:(value:string)=>void}) {
+function CampaignDetail({campaign,onBack,currency,setCurrency,tape}:{campaign:(typeof campaigns)[number];onBack:()=>void;currency:string;setCurrency:(value:string)=>void;tape:TapeFeed}) {
   const noEffect=campaign.id==='membership';
   return <>
     <button className="back-link" onClick={onBack}>← CAMPAIGN INDEX</button>
@@ -99,11 +99,25 @@ function CampaignDetail({campaign,onBack,currency,setCurrency}:{campaign:(typeof
     <div className="analysis-grid"><div><SectionTitle n="03" title="SIGNATURE MATCH" meta="TICKET DISTRIBUTION"/><div className="chart-panel"><Histogram/><div className="chart-caption"><Provenance type="inferred"/>Settlements ≥ $1,000 from eligible tiers. Merchant identity is not visible on-chain.</div></div></div><div><SectionTitle n="04" title="ACQUISITION" meta="FIRST-SPEND ACCOUNTS"/><div className="metric-list"><MetricRow label="NEW CARDS / WINDOW" value="184" type="measured"/><MetricRow label="REACTIVATED CARDS" value="73" type="estimated"/><MetricRow label="LUXE + SHARE" value="62.4%" type="measured"/><MetricRow label="COST / NEW CARD" value="PENDING" type="estimated"/></div></div></div>
     <div className="analysis-grid"><div><SectionTitle n="05" title="TIER MIGRATION" meta="14D RUN-UP → WINDOW"/><div className="chart-panel"><FlowChart/></div></div><div><SectionTitle n="06" title="TOKEN EVENT STUDY" meta="BETA-ADJUSTED RETURN"/><div className="chart-panel"><EventChart/><div className="chart-caption"><Provenance type="estimated"/>ETHFI return minus estimated market beta. Announcement day = 0.</div></div></div></div>
     <SectionTitle n="07" title="PERSISTENCE" meta="CAMPAIGN COHORT VS BASELINE"/><div className="chart-panel tall"><PersistenceChart/><div className="chart-caption"><Provenance type="estimated"/>Share of acquired or reactivated cards still spending. Weeks 8 and 12 are pending for live cohorts.</div></div>
-    <SectionTitle n="08" title="SIGNATURE-MATCHED TAPE" meta="RAW SETTLEMENT EVIDENCE"/><div className="full-tape"><TapeTable rows={tapeRows.slice(0,6)}/></div>
+    <SectionTitle n="08" title="SIGNATURE-MATCHED TAPE" meta="RAW SETTLEMENT EVIDENCE"/><div className="full-tape"><TapeTable rows={tape.rows.filter((event) => event.signatureCampaignIds.includes(campaign.registryId)).slice(0,6)}/></div>
   </>;
 }
 
-function TapeView({paused,setPaused}:{paused:boolean;setPaused:(value:boolean)=>void}) { return <><PageHeading eyebrow="ETHER.FI CASH / SETTLEMENT TAPE" title="RAW SETTLEMENTS. CAMPAIGN SIGNATURES MARKED." meta={<>OP MAINNET / SYNTHETIC ADAPTER<br/><span>{paused?'FEED PAUSED':'2.4S INDEXER LAG'}</span></>}/><div className="control-line"><span>ROWS <b>500 RING BUFFER</b></span><div className="segmented"><button className="active">ALL</button><button>SIGNATURE</button><button>SPEND</button><button onClick={()=>setPaused(!paused)}>{paused?'RESUME [SPACE]':'PAUSE [SPACE]'}</button></div></div><div className={`full-tape ${paused?'paused':''}`}><TapeTable rows={tapeRows}/></div><div className="method-note"><Provenance type="measured"/>Tape rows are settlement events, not card authorizations. Merchant, MCC, country, declines and approval rate are not present on-chain.</div></>; }
+function TapeView({paused,setPaused,tape}:{paused:boolean;setPaused:(value:boolean)=>void;tape:TapeFeed}) {
+  const [filter,setFilter] = useState<'all'|'signature'|'spend'>('all');
+  const rows = tape.rows.filter((event) => filter==='all' || (filter==='signature' ? event.signatureCampaignIds.length > 0 : event.eventType==='spend'));
+  const feedState = paused
+    ? `PAUSED · ${tape.pending} QUEUED`
+    : tape.connection==='connected'
+      ? `${tape.mode==='demo-replay'?'DEMO REPLAY':'LIVE'} · ${tape.received} RECEIVED`
+      : tape.connection.toUpperCase();
+  return <>
+    <PageHeading eyebrow="ETHER.FI CASH / SETTLEMENT TAPE" title="RAW SETTLEMENTS. CAMPAIGN SIGNATURES MARKED." meta={<>POSTGRES → WEBSOCKET / SYNTHETIC ADAPTER<br/><span>{feedState}</span></>}/>
+    <div className="control-line"><span>ROWS <b>{rows.length} / 500 RING BUFFER</b></span><div className="segmented"><button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>ALL</button><button className={filter==='signature'?'active':''} onClick={()=>setFilter('signature')}>SIGNATURE</button><button className={filter==='spend'?'active':''} onClick={()=>setFilter('spend')}>SPEND</button><button onClick={()=>setPaused(!paused)}>{paused?'RESUME [SPACE]':'PAUSE [SPACE]'}</button></div></div>
+    <div className={`full-tape ${paused?'paused':''}`}><TapeTable rows={rows}/></div>
+    <div className="method-note"><Provenance type="demo"/>Rows stream from Postgres through the local WebSocket server. Campaign-window shading and signature marks are registry-derived; merchant identity remains unavailable.</div>
+  </>;
+}
 
 function BaselineView({currency,setCurrency}:{currency:string;setCurrency:(value:string)=>void}) { return <><PageHeading eyebrow="ETHER.FI CASH / PROGRAM BASELINE" title="SPEND, CARDS AND TICKET SHAPE OVER TIME." meta={<>18 MONTH SYNTHETIC HISTORY<br/><span>CAMPAIGN WINDOWS SHADED</span></>}/><div className="control-line"><span>ROLLUP <b>DAILY / FINALIZED</b></span><Denomination value={currency} setValue={setCurrency}/></div><div className="stat-grid"><Stat label="SETTLED VOLUME / 30D" value="$6.82M" note="+12.4% VS PRIOR" provenance="measured"/><Stat label="ACTIVE CARDS / 30D" value="4,921" note="+8.1% VS PRIOR" provenance="measured"/><Stat label="TXN / ACTIVE CARD" value="8.41" note="MONTHLY" provenance="estimated"/><Stat label="UNPRICED VOLUME" value="0.03%" note="NEVER COERCED TO ZERO" provenance="measured"/></div><SectionTitle n="01" title="SETTLEMENT VOLUME" meta="CAMPAIGN WINDOWS OVERLAID"/><div className="chart-panel tall"><BaselineChart/></div><div className="analysis-grid"><div><SectionTitle n="02" title="ACTIVE CARDS" meta="UNIQUE / 7D ROLLING"/><div className="chart-panel"><LineChart/></div></div><div><SectionTitle n="03" title="TICKET DISTRIBUTION" meta="LOG SCALE"/><div className="chart-panel"><Histogram/></div></div></div></>; }
 
@@ -122,10 +136,41 @@ function Panel({title,meta,children}:{title:string;meta:string;children:ReactNod
 function MetricRow({label,value,type}:{label:string;value:string;type:Provenance}) { return <div className="metric-row"><span>{label}</span><b>{value}</b><Provenance type={type}/></div>; }
 function MethodBlock({n,title,children}:{n:string;title:string;children:ReactNode}) { return <article className="method-block"><span>{n}</span><h2>{title}</h2>{children}</article>; }
 function ProvenanceCard({type,text}:{type:Provenance;text:string}) { return <div className="provenance-card"><Provenance type={type}/><p>{text}</p></div>; }
-function Footer() { return <footer><span>INDEXER LAG 02.4S</span><span>LAST BLOCK 141,802,991</span><span>● MEASURED&nbsp;&nbsp; ◐ INFERRED&nbsp;&nbsp; ○ ESTIMATED&nbsp;&nbsp; ◇ DEMO</span><span>NEVER ASKS FOR YOUR KEYS</span></footer>; }
+function Footer({tape}:{tape:TapeFeed}) {
+  const latestBlock = tape.rows[0]?.blockNumber;
+  return <footer><span>WS {tape.connection.toUpperCase()}</span><span>LAST BLOCK {latestBlock?.toLocaleString() ?? '—'}</span><span>● MEASURED&nbsp;&nbsp; ◐ INFERRED&nbsp;&nbsp; ○ ESTIMATED&nbsp;&nbsp; ◇ DEMO</span><span>NEVER ASKS FOR YOUR KEYS</span></footer>;
+}
 
-function TapeExcerpt({limit}:{limit:number}) { return <>{tapeRows.slice(0,limit).map((row)=><div className="tape-row" key={row[0]}>{[row[0],row[1],row[2],row[4],row[5]].map((cell)=><span key={cell}>{cell}</span>)}</div>)}</>; }
-function TapeTable({rows}:{rows:ReadonlyArray<readonly string[]>}) { return <div className="tape-table"><div className="tape-full-row tape-head"><span>TIME / UTC</span><span>DIR</span><span>PROGRAM</span><span>AMOUNT</span><span>TOKEN</span><span>CHAIN</span><span>CARD</span><span>TYPE</span><span>TX</span></div>{rows.map((row,index)=><div className={`tape-full-row ${index===0?'new-row':''}`} key={row[0]}><span>{row[0]}</span><span className="positive">●</span><span>ETHER.FI</span><strong>{row[1]}</strong><span>{row[2]}</span><span>{row[3]}</span><span>{row[4]}</span><span className={row[5]==='SIGNATURE'?'signature':''}>{row[5]}</span><a href="https://optimistic.etherscan.io" target="_blank" rel="noreferrer" aria-label="Open transaction">↗</a></div>)}</div>; }
+function formatTapeAmount(event:TapeEvent):string {
+  if (event.amountUsd===null) return 'UNPRICED';
+  return `+$${Number(event.amountUsd).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+}
+
+function shortAddress(value:string):string { return `${value.slice(0,6)}…${value.slice(-4)}`; }
+
+function tapeLabel(event:TapeEvent):string {
+  if (event.signatureCampaignIds.length>0) return 'SIGNATURE';
+  return event.eventType.toUpperCase();
+}
+
+function TapeExcerpt({rows,limit}:{rows:readonly TapeEvent[];limit:number}) {
+  if (rows.length===0) return <div className="tape-empty">WAITING FOR POSTGRES SNAPSHOT…</div>;
+  return <>{rows.slice(0,limit).map((event)=><div className={`tape-row ${event.campaignWindowIds.length>0?'campaign-window':''}`} key={event.id}><span>{event.blockTime.slice(11,19)}</span><span>{formatTapeAmount(event)}</span><span>{event.tokenSymbol}</span><span>{shortAddress(event.cardAccount)}</span><span className={event.signatureCampaignIds.length>0?'signature':''}>{tapeLabel(event)}</span></div>)}</>;
+}
+
+const TapeEventRow = memo(function TapeEventRow({event,isNewest}:{event:TapeEvent;isNewest:boolean}) {
+  const classes = ['tape-full-row'];
+  if (isNewest) classes.push('new-row');
+  if (event.campaignWindowIds.length>0) classes.push('campaign-window');
+  if (event.signatureCampaignIds.length>0) classes.push('signature-match');
+  return <div className={classes.join(' ')} title={event.campaignWindowIds.length>0?`Campaign window: ${event.campaignWindowIds.join(', ')}`:undefined}>
+    <span>{event.blockTime.slice(11,19)}</span><span className="positive">●</span><span>ETHER.FI</span><strong>{formatTapeAmount(event)}</strong><span>{event.tokenSymbol}</span><span>OP</span><span>{shortAddress(event.cardAccount)}</span><span className={event.signatureCampaignIds.length>0?'signature':''}>{tapeLabel(event)}</span><a href={`https://optimistic.etherscan.io/tx/${event.txHash}`} target="_blank" rel="noreferrer" aria-label="Open transaction">↗</a>
+  </div>;
+});
+
+function TapeTable({rows}:{rows:readonly TapeEvent[]}) {
+  return <div className="tape-table"><div className="tape-full-row tape-head"><span>TIME / UTC</span><span>DIR</span><span>PROGRAM</span><span>AMOUNT</span><span>TOKEN</span><span>CHAIN</span><span>CARD</span><span>TYPE</span><span>TX</span></div>{rows.length===0?<div className="tape-empty">NO MATCHING SETTLEMENTS</div>:rows.map((event,index)=><TapeEventRow event={event} isNewest={index===0} key={event.id}/>)}</div>;
+}
 
 function LineChart(){return <svg className="terminal-chart" viewBox="0 0 600 150" role="img" aria-label="Settlement volume rising over seven days"><path className="gridline" d="M0 28H600M0 72H600M0 116H600"/><path className="area" d="M0 115L45 109L92 102L137 107L184 86L230 92L276 75L322 81L368 51L414 59L460 38L506 43L552 19L600 30V150H0Z"/><path className="line" d="M0 115L45 109L92 102L137 107L184 86L230 92L276 75L322 81L368 51L414 59L460 38L506 43L552 19L600 30"/><text x="592" y="24" textAnchor="end">$1.84M</text></svg>}
 function TrendChart(){return <svg className="terminal-chart" viewBox="0 0 800 220" role="img" aria-label="Eligible and control cohort pre-trends"><path className="gridline" d="M40 35H780M40 95H780M40 155H780M40 205H780"/><rect className="window-band" x="665" y="18" width="115" height="187"/><path className="control-line-svg" d="M40 170L118 155L196 160L274 140L352 146L430 128L508 119L586 105L665 96L722 91L780 88"/><path className="eligible-line" d="M40 166L118 151L196 157L274 135L352 141L430 124L508 114L586 101L665 94L722 52L780 34"/><text x="770" y="28" textAnchor="end">ELIGIBLE</text><text x="770" y="105" textAnchor="end">CONTROL</text><text x="672" y="198">WINDOW</text></svg>}

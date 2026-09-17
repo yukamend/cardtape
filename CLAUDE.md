@@ -22,8 +22,11 @@
 - `npm run seed` — generate and idempotently load the 18-month fixture.
 - `npm run seed:dry` — generate without a database.
 - `npm run estimate` — recompute every campaign result from immutable database facts.
+- `npm run tape` — run the local Postgres `LISTEN/NOTIFY` → WebSocket broadcaster.
+- `npm run tape:dev` — run the broadcaster and replay existing demo facts without inserting rows.
+- `npm run tape:stress` — push 500 ephemeral notifications through Postgres and the local WebSocket server.
 - `npm run typecheck` — strict TypeScript check.
 - `npm test` — unit tests; includes Postgres integration when `DATABASE_URL` is set.
 - `npm run build` — production web build.
 
-Do not add live adapters, extra programs, accounts, alerts, or unrelated surfaces before the estimator layer and its synthetic gates remain green.
+Do not add the OP Mainnet adapter, extra programs, accounts, alerts, or unrelated surfaces before the tape and estimator gates remain green.
