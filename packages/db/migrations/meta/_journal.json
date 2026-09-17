@@ -15,6 +15,13 @@
       "when": 1789640436718,
       "tag": "0001_fantastic_logan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789656062357,
+      "tag": "0002_far_peter_quill",
+      "breakpoints": true
     }
   ]
 }

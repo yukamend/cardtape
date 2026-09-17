@@ -113,6 +113,7 @@ export const tierEvent = pgTable(
     action: text('action').$type<TierAction>().notNull(),
     asset: text('asset').$type<'ETHFI' | 'LIQUID'>().notNull(),
     amountRaw: numeric('amount_raw', { precision: 78, scale: 0 }).notNull(),
+    sourceId: text('source_id').notNull(),
     provenance: text('provenance').$type<FactProvenance>().notNull(),
     finalized: boolean('finalized').notNull().default(false),
   },
@@ -124,6 +125,7 @@ export const tierEvent = pgTable(
     check('tier_event_provenance_check', sql`${table.provenance} IN ('measured', 'demo')`),
     index('tier_event_program_time_idx').on(table.programId, table.blockTime),
     index('tier_event_account_time_idx').on(table.cardAccount, table.blockTime),
+    index('tier_event_source_block_idx').on(table.sourceId, table.blockNumber),
   ],
 );
 

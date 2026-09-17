@@ -1,6 +1,6 @@
 # CARDTAPE
 
-CARDTAPE is a crypto-card campaign effectiveness terminal. The current local implementation covers one program, ether.fi Cash, with a versioned campaign registry, append-only settlement facts, retrospective tier intervals, deterministic synthetic history, database-enforced provenance, verified campaign estimators, and a local Postgres-to-WebSocket settlement tape.
+CARDTAPE is a crypto-card campaign effectiveness terminal. The current local implementation covers one program, ether.fi Cash, with a versioned campaign registry, append-only settlement facts, retrospective tier intervals, deterministic synthetic history, database-enforced provenance, verified campaign estimators, a live OP Mainnet adapter, and a local Postgres-to-WebSocket settlement tape.
 
 All generated fixture rows carry `provenance = 'demo'`. They are test data, not claims about live card activity.
 
@@ -15,16 +15,22 @@ npm run db:local:start
 npm run db:migrate
 npm run seed
 npm run estimate
-npm run tape:dev
+npm run tape
 ```
 
-In a second terminal:
+In a second terminal, start the OP Mainnet indexer:
+
+```bash
+npm run indexer
+```
+
+In a third terminal:
 
 ```bash
 npm run dev
 ```
 
-Open `http://localhost:3000`. `tape:dev` replays already-seeded synthetic campaign-window rows through Postgres `NOTIFY`; it does not create new fact rows. Use `npm run tape` to wait only for newly ingested events. Stop the database with `npm run db:local:stop`.
+Open `http://localhost:3000`. New OP facts normally reach the browser within one 2-second poll. Use `npm run indexer:once` for one bounded 25-block import. `npm run tape:dev` remains available as an explicit synthetic replay; it does not create fact rows. Stop the database with `npm run db:local:stop`.
 
 ## Verification
 
@@ -41,7 +47,7 @@ With local Postgres running, `npm test` also executes the database integration t
 
 - `packages/core` — domain types, campaign registry, tier ladder, interval rules, estimators, tape classification, and frame buffer.
 - `packages/db` — Drizzle schema, migrations, database client, idempotent write paths, and tape snapshot queries.
-- `packages/adapters` — deterministic 18-month synthetic source with known campaign effects.
+- `packages/adapters` — deterministic 18-month synthetic source plus the measured OP Mainnet adapter.
 - `apps/indexer` — migration, seed, estimator, indexer, and WebSocket broadcaster entry points.
 - `tests` — deterministic generation, idempotency, tier intervals, money, registry, estimators, tape backpressure, and Postgres integration checks.
 
@@ -73,6 +79,8 @@ New adapter facts commit their ingest cursor and rows in one transaction, then p
 
 Campaign-window shading and signature marks are derived from the versioned registry plus the account tier at event time. They are never merchant labels. The full contract is recorded in `docs/tape.md`.
 
-## Deliberately deferred
+## OP Mainnet gate
 
-The OP Mainnet adapter and real chain data belong to Phase 4. The current site remains explicit demo data until those live inputs are independently verified.
+The adapter reads the official ether.fi Cash emitter and Liquid module deployments, keeps its cursor in Postgres, verifies the cursor block hash on restart, rewinds a bounded range on reorg, and promotes rows after 20 confirmations. Replaying a block window inserts zero rows. Contract addresses, event normalization, and operational commands are recorded in `docs/optimism.md`.
+
+Synthetic history remains labelled `demo`; OP rows are individually labelled `measured`. Campaign attribution remains inference and is not manufactured from settlement logs that do not expose merchant identity.

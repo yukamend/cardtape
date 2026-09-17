@@ -80,6 +80,7 @@ export interface TierEvent {
   action: TierAction;
   asset: 'ETHFI' | 'LIQUID';
   amountRaw: string;
+  sourceId: string;
   provenance: FactProvenance;
   finalized: boolean;
 }

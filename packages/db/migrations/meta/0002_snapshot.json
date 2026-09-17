@@ -1,0 +1,864 @@
+{
+  "id": "bca675bb-7cc4-42f7-b1e9-ca4b8676f1ea",
+  "prevId": "0f0881f7-2b5e-4414-b344-ac5e9563df55",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.campaign": {
+      "name": "campaign",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "program_id": {
+          "name": "program_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_url": {
+          "name": "source_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "announced_at": {
+          "name": "announced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payout_at": {
+          "name": "payout_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mechanic": {
+          "name": "mechanic",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "eligible_tiers": {
+          "name": "eligible_tiers",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "control_tiers": {
+          "name": "control_tiers",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "region": {
+          "name": "region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stated_budget_usd": {
+          "name": "stated_budget_usd",
+          "type": "numeric(20, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signature": {
+          "name": "signature",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "method_note": {
+          "name": "method_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "campaign_date_order": {
+          "name": "campaign_date_order",
+          "value": "\"campaign\".\"ends_at\" > \"campaign\".\"starts_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.campaign_result": {
+      "name": "campaign_result",
+      "schema": "",
+      "columns": {
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metric": {
+          "name": "metric",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "numeric(20, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ci_low": {
+          "name": "ci_low",
+          "type": "numeric(20, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ci_high": {
+          "name": "ci_high",
+          "type": "numeric(20, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provenance": {
+          "name": "provenance",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "method_note": {
+          "name": "method_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "campaign_result_computed_at_idx": {
+          "name": "campaign_result_computed_at_idx",
+          "columns": [
+            {
+              "expression": "computed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "campaign_result_campaign_id_campaign_id_fk": {
+          "name": "campaign_result_campaign_id_campaign_id_fk",
+          "tableFrom": "campaign_result",
+          "tableTo": "campaign",
+          "columnsFrom": [
+            "campaign_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "campaign_result_campaign_id_metric_pk": {
+          "name": "campaign_result_campaign_id_metric_pk",
+          "columns": [
+            "campaign_id",
+            "metric"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "campaign_result_provenance_check": {
+          "name": "campaign_result_provenance_check",
+          "value": "\"campaign_result\".\"provenance\" IN ('measured', 'inferred', 'estimated', 'demo')"
+        },
+        "campaign_result_ci_order": {
+          "name": "campaign_result_ci_order",
+          "value": "\"campaign_result\".\"ci_low\" IS NULL OR \"campaign_result\".\"ci_high\" IS NULL OR \"campaign_result\".\"ci_high\" >= \"campaign_result\".\"ci_low\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.ingest_cursor": {
+      "name": "ingest_cursor",
+      "schema": "",
+      "columns": {
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "block_number": {
+          "name": "block_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block_hash": {
+          "name": "block_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.market_price": {
+      "name": "market_price",
+      "schema": "",
+      "columns": {
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "symbol": {
+          "name": "symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_at": {
+          "name": "observed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price_usd": {
+          "name": "price_usd",
+          "type": "numeric(30, 10)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "volume_usd": {
+          "name": "volume_usd",
+          "type": "numeric(30, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provenance": {
+          "name": "provenance",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "market_price_symbol_time_idx": {
+          "name": "market_price_symbol_time_idx",
+          "columns": [
+            {
+              "expression": "symbol",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "observed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "market_price_source_id_symbol_observed_at_pk": {
+          "name": "market_price_source_id_symbol_observed_at_pk",
+          "columns": [
+            "source_id",
+            "symbol",
+            "observed_at"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "market_price_positive": {
+          "name": "market_price_positive",
+          "value": "\"market_price\".\"price_usd\" > 0 AND \"market_price\".\"volume_usd\" >= 0"
+        },
+        "market_price_provenance_check": {
+          "name": "market_price_provenance_check",
+          "value": "\"market_price\".\"provenance\" IN ('measured', 'demo')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.spend_event": {
+      "name": "spend_event",
+      "schema": "",
+      "columns": {
+        "chain_id": {
+          "name": "chain_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tx_hash": {
+          "name": "tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "log_index": {
+          "name": "log_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block_number": {
+          "name": "block_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block_time": {
+          "name": "block_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "program_id": {
+          "name": "program_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "card_account": {
+          "name": "card_account",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_symbol": {
+          "name": "token_symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decimals": {
+          "name": "decimals",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_raw": {
+          "name": "amount_raw",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settlement_ccy": {
+          "name": "settlement_ccy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_usd": {
+          "name": "amount_usd",
+          "type": "numeric(20, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_source": {
+          "name": "price_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "priced_at": {
+          "name": "priced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provenance": {
+          "name": "provenance",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "finalized": {
+          "name": "finalized",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {
+        "spend_event_program_time_idx": {
+          "name": "spend_event_program_time_idx",
+          "columns": [
+            {
+              "expression": "program_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "block_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "spend_event_account_time_idx": {
+          "name": "spend_event_account_time_idx",
+          "columns": [
+            {
+              "expression": "card_account",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "block_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "spend_event_source_block_idx": {
+          "name": "spend_event_source_block_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "block_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "spend_event_chain_id_tx_hash_log_index_pk": {
+          "name": "spend_event_chain_id_tx_hash_log_index_pk",
+          "columns": [
+            "chain_id",
+            "tx_hash",
+            "log_index"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "spend_event_amount_raw_nonnegative": {
+          "name": "spend_event_amount_raw_nonnegative",
+          "value": "\"spend_event\".\"amount_raw\" >= 0"
+        },
+        "spend_event_decimals_range": {
+          "name": "spend_event_decimals_range",
+          "value": "\"spend_event\".\"decimals\" BETWEEN 0 AND 36"
+        },
+        "spend_event_provenance_check": {
+          "name": "spend_event_provenance_check",
+          "value": "\"spend_event\".\"provenance\" IN ('measured', 'demo')"
+        },
+        "spend_event_currency_check": {
+          "name": "spend_event_currency_check",
+          "value": "\"spend_event\".\"settlement_ccy\" IN ('USD', 'EUR', 'GBP')"
+        },
+        "spend_event_type_check": {
+          "name": "spend_event_type_check",
+          "value": "\"spend_event\".\"event_type\" IN ('spend', 'top_up', 'cashback', 'settlement')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.tier_event": {
+      "name": "tier_event",
+      "schema": "",
+      "columns": {
+        "chain_id": {
+          "name": "chain_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tx_hash": {
+          "name": "tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "log_index": {
+          "name": "log_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block_number": {
+          "name": "block_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block_time": {
+          "name": "block_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "program_id": {
+          "name": "program_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "card_account": {
+          "name": "card_account",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "asset": {
+          "name": "asset",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_raw": {
+          "name": "amount_raw",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provenance": {
+          "name": "provenance",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "finalized": {
+          "name": "finalized",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {
+        "tier_event_program_time_idx": {
+          "name": "tier_event_program_time_idx",
+          "columns": [
+            {
+              "expression": "program_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "block_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tier_event_account_time_idx": {
+          "name": "tier_event_account_time_idx",
+          "columns": [
+            {
+              "expression": "card_account",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "block_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tier_event_source_block_idx": {
+          "name": "tier_event_source_block_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "block_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "tier_event_chain_id_tx_hash_log_index_pk": {
+          "name": "tier_event_chain_id_tx_hash_log_index_pk",
+          "columns": [
+            "chain_id",
+            "tx_hash",
+            "log_index"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "tier_event_amount_raw_nonnegative": {
+          "name": "tier_event_amount_raw_nonnegative",
+          "value": "\"tier_event\".\"amount_raw\" >= 0"
+        },
+        "tier_event_action_check": {
+          "name": "tier_event_action_check",
+          "value": "\"tier_event\".\"action\" IN ('stake', 'unstake', 'deposit', 'withdraw')"
+        },
+        "tier_event_asset_check": {
+          "name": "tier_event_asset_check",
+          "value": "\"tier_event\".\"asset\" IN ('ETHFI', 'LIQUID')"
+        },
+        "tier_event_provenance_check": {
+          "name": "tier_event_provenance_check",
+          "value": "\"tier_event\".\"provenance\" IN ('measured', 'demo')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.tier_period": {
+      "name": "tier_period",
+      "schema": "",
+      "columns": {
+        "program_id": {
+          "name": "program_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "card_account": {
+          "name": "card_account",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tier": {
+          "name": "tier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_to": {
+          "name": "valid_to",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "qualified_by": {
+          "name": "qualified_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "tier_period_account_interval_idx": {
+          "name": "tier_period_account_interval_idx",
+          "columns": [
+            {
+              "expression": "program_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "card_account",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "valid_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "valid_to",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "tier_period_program_id_card_account_valid_from_pk": {
+          "name": "tier_period_program_id_card_account_valid_from_pk",
+          "columns": [
+            "program_id",
+            "card_account",
+            "valid_from"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "tier_period_date_order": {
+          "name": "tier_period_date_order",
+          "value": "\"tier_period\".\"valid_to\" IS NULL OR \"tier_period\".\"valid_to\" > \"tier_period\".\"valid_from\""
+        },
+        "tier_period_tier_check": {
+          "name": "tier_period_tier_check",
+          "value": "\"tier_period\".\"tier\" IN ('core', 'luxe', 'pinnacle', 'vip')"
+        },
+        "tier_period_qualification_check": {
+          "name": "tier_period_qualification_check",
+          "value": "\"tier_period\".\"qualified_by\" IN ('sethfi', 'liquid', 'points', 'paid', 'unknown')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

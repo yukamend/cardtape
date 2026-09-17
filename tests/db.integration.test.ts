@@ -4,8 +4,8 @@ import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { generateSyntheticDataset } from '../packages/adapters/src/synthetic';
 import { createDatabase, type Database } from '../packages/db/src/client';
-import { ingestSpendBatch, insertSpendEvents } from '../packages/db/src/repository';
-import { ingestCursor, spendEvent } from '../packages/db/src/schema';
+import { finalizeChainSource, ingestChainBatch, ingestSpendBatch, insertSpendEvents, rewindChainSource } from '../packages/db/src/repository';
+import { ingestCursor, spendEvent, tierEvent } from '../packages/db/src/schema';
 import { parseSpendEventNotification, SPEND_EVENT_CHANNEL } from '../packages/db/src/tape';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -21,13 +21,19 @@ integration('Postgres idempotency', () => {
     await migrate(db, { migrationsFolder: './packages/db/migrations' });
     await db.delete(spendEvent).where(eq(spendEvent.chainId, 9_999));
     await db.delete(spendEvent).where(eq(spendEvent.chainId, 9_998));
+    await db.delete(spendEvent).where(eq(spendEvent.chainId, 9_997));
+    await db.delete(tierEvent).where(eq(tierEvent.chainId, 9_997));
     await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:tape-notify'));
+    await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:chain-source'));
   });
 
   afterAll(async () => {
     if (db) await db.delete(spendEvent).where(eq(spendEvent.chainId, 9_999));
     if (db) await db.delete(spendEvent).where(eq(spendEvent.chainId, 9_998));
+    if (db) await db.delete(spendEvent).where(eq(spendEvent.chainId, 9_997));
+    if (db) await db.delete(tierEvent).where(eq(tierEvent.chainId, 9_997));
     if (db) await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:tape-notify'));
+    if (db) await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:chain-source'));
     await database?.pool.end();
   });
 
@@ -68,5 +74,31 @@ integration('Postgres idempotency', () => {
       await listener.query(`UNLISTEN ${SPEND_EVENT_CHANNEL}`);
       listener.release();
     }
+  });
+
+  it('commits both fact streams with the cursor, finalizes them, and rewinds a reorg range', async () => {
+    if (!db) throw new Error('Integration database was not initialized');
+    const dataset = generateSyntheticDataset({ seed: 'postgres-chain-source', accountCount: 50 });
+    const sourceId = 'test:chain-source';
+    const spendRows = dataset.spendEvents.slice(0, 2).map((event, index) => ({
+      ...event,
+      chainId: 9_997,
+      blockNumber: 100 + index,
+      sourceId,
+      finalized: false,
+    }));
+    const tierRows = dataset.tierEvents.slice(0, 2).map((event, index) => ({
+      ...event,
+      chainId: 9_997,
+      blockNumber: 100 + index,
+      sourceId,
+      finalized: false,
+    }));
+    const cursor = { blockNumber: 101, blockHash: '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' as const };
+
+    expect(await ingestChainBatch(db, sourceId, spendRows, tierRows, cursor)).toEqual({ spendEvents: 2, tierEvents: 2 });
+    expect(await ingestChainBatch(db, sourceId, spendRows, tierRows, cursor)).toEqual({ spendEvents: 0, tierEvents: 0 });
+    expect(await finalizeChainSource(db, sourceId, 100)).toEqual({ spendEvents: 1, tierEvents: 1 });
+    expect(await rewindChainSource(db, sourceId, { blockNumber: 100, blockHash: null })).toEqual({ spendEvents: 1, tierEvents: 1 });
   });
 });

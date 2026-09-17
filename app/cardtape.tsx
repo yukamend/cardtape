@@ -51,7 +51,9 @@ export default function Cardtape() {
       <nav className="windows" aria-label="Time window">{['1H','24H','7D','30D','ALL'].map((item)=><button key={item} className={item===windowRange?'active':''} onClick={()=>setWindowRange(item)}>{item}</button>)}</nav>
       <div className="header-actions"><button aria-label={paused?'Resume tape':'Pause tape'} onClick={()=>setPaused(!paused)}>{paused?'RESUME':'PAUSE'}</button><button aria-label="Print screenshot mode" onClick={()=>window.print()}>[S]</button><span className={`live ${tape.connection==='connected'?'':'offline'}`}><span className="live-dot"/>{tape.connection==='connected'?'WS · OP':'WS · OFFLINE'}</span></div>
     </header>
-    <div className="demo-banner">DEMO DATA · SYNTHETIC SETTLEMENTS · VALUES ARE NOT CLAIMS ABOUT LIVE ACTIVITY</div>
+    <div className="demo-banner">{tape.mode==='live'
+      ? 'MIXED DATA · LIVE OP SETTLEMENT TAPE · CAMPAIGN ANALYTICS REMAIN LABELED DEMO / ESTIMATED'
+      : 'DEMO DATA · SYNTHETIC SETTLEMENTS · VALUES ARE NOT CLAIMS ABOUT LIVE ACTIVITY'}</div>
     <div className={`workspace ${rightOpen?'':'right-closed'}`}>
       <LeftRail view={view} setView={setView} openCampaign={openCampaign} selectedCampaign={selectedCampaign}/>
       <section className="main-panel">
@@ -111,11 +113,12 @@ function TapeView({paused,setPaused,tape}:{paused:boolean;setPaused:(value:boole
     : tape.connection==='connected'
       ? `${tape.mode==='demo-replay'?'DEMO REPLAY':'LIVE'} · ${tape.received} RECEIVED`
       : tape.connection.toUpperCase();
+  const adapterLabel = tape.mode==='demo-replay' ? 'SYNTHETIC ADAPTER' : 'OP MAINNET ADAPTER';
   return <>
-    <PageHeading eyebrow="ETHER.FI CASH / SETTLEMENT TAPE" title="RAW SETTLEMENTS. CAMPAIGN SIGNATURES MARKED." meta={<>POSTGRES → WEBSOCKET / SYNTHETIC ADAPTER<br/><span>{feedState}</span></>}/>
+    <PageHeading eyebrow="ETHER.FI CASH / SETTLEMENT TAPE" title="RAW SETTLEMENTS. CAMPAIGN SIGNATURES MARKED." meta={<>POSTGRES → WEBSOCKET / {adapterLabel}<br/><span>{feedState}</span></>}/>
     <div className="control-line"><span>ROWS <b>{rows.length} / 500 RING BUFFER</b></span><div className="segmented"><button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>ALL</button><button className={filter==='signature'?'active':''} onClick={()=>setFilter('signature')}>SIGNATURE</button><button className={filter==='spend'?'active':''} onClick={()=>setFilter('spend')}>SPEND</button><button onClick={()=>setPaused(!paused)}>{paused?'RESUME [SPACE]':'PAUSE [SPACE]'}</button></div></div>
     <div className={`full-tape ${paused?'paused':''}`}><TapeTable rows={rows}/></div>
-    <div className="method-note"><Provenance type="demo"/>Rows stream from Postgres through the local WebSocket server. Campaign-window shading and signature marks are registry-derived; merchant identity remains unavailable.</div>
+    <div className="method-note"><Provenance type={tape.mode==='demo-replay'?'demo':'measured'}/>Rows stream from Postgres through the local WebSocket server. Campaign-window shading and signature marks are registry-derived; merchant identity remains unavailable.</div>
   </>;
 }
 

@@ -208,6 +208,7 @@ function createTierFacts(accounts: readonly SyntheticAccount[], seed: string): {
         action: isDowngrade ? (isLiquid ? 'withdraw' : 'unstake') : (isLiquid ? 'deposit' : 'stake'),
         asset: isLiquid ? 'LIQUID' : 'ETHFI',
         amountRaw: usdToRaw(amount, 18),
+        sourceId: 'synthetic:tier',
         provenance: 'demo',
         finalized: true,
       });
