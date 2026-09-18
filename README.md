@@ -35,6 +35,8 @@ Open `http://localhost:3000`. New OP facts normally reach the browser within one
 
 `npm run tiers:reconstruct` scans finalized Safe deployments and tier assignments, rebuilds measured `tier_period` intervals atomically, and fails if the reconstructed current state differs from the Cash contract. The live `/tiers` endpoint then serves current population, 30-day net flow, and a 12-week interval history to the terminal.
 
+`npm run audit:optimism -- --blocks 1000` performs a read-only, field-for-field comparison between a finalized raw Optimism window and the persisted spend, cashback, and tier-position facts. Pass `--through-block N` to reproduce a previously published audit range exactly.
+
 ## Verification
 
 ```bash

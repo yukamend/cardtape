@@ -51,6 +51,20 @@ npm run indexer:once -- --replay-blocks 25
 
 The replay mode deliberately skips finalization updates, so a successful gate reports zero inserted and zero finalized rows.
 
+For an independently repeatable, read-only parity audit, compare a finalized RPC window with every persisted normalized field:
+
+```bash
+npm run audit:optimism -- --blocks 1000
+```
+
+The auditor chooses a range behind the confirmation boundary, reads the raw contract logs again, normalizes them through the production adapter, and compares primary keys plus timestamps, accounts, raw amounts, derived USD, token metadata, provenance, and finality against Postgres. It never writes facts or advances the cursor. A passing report requires equal row counts, no duplicate raw keys, and zero missing, unexpected, or mismatched records. Derived USD is compared at the declared `numeric(20,4)` storage precision; `amount_raw` remains exact.
+
+An outside reviewer can pin the end of the range for a stable reproduction:
+
+```bash
+npm run audit:optimism -- --blocks 1000 --through-block 157056911
+```
+
 Configuration knobs are documented in `.env.example`: confirmation depth, block batch size, initial lookback, poll interval, reorg depth, and an optional explicit start block.
 
 ## Scope boundary

@@ -20,6 +20,7 @@
     "seed:dry": "tsx apps/indexer/src/seed.ts --dry-run",
     "estimate": "tsx apps/indexer/src/estimate.ts",
     "indexer": "tsx apps/indexer/src/index.ts",
+    "audit:optimism": "tsx apps/indexer/src/audit-optimism.ts",
     "indexer:once": "tsx apps/indexer/src/index.ts --once",
     "tiers:reconstruct": "tsx apps/indexer/src/reconstruct-tiers.ts",
     "tape": "tsx apps/indexer/src/tape-server.ts",
