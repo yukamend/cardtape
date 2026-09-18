@@ -4,8 +4,8 @@ import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { generateSyntheticDataset } from '../packages/adapters/src/synthetic';
 import { createDatabase, type Database } from '../packages/db/src/client';
-import { finalizeChainSource, ingestChainBatch, ingestSpendBatch, insertSpendEvents, rewindChainSource } from '../packages/db/src/repository';
-import { ingestCursor, spendEvent, tierEvent } from '../packages/db/src/schema';
+import { finalizeChainSource, ingestChainBatch, ingestSpendBatch, insertSpendEvents, replaceTierPeriodsForSource, rewindChainSource } from '../packages/db/src/repository';
+import { ingestCursor, spendEvent, tierEvent, tierPeriod } from '../packages/db/src/schema';
 import { parseSpendEventNotification, SPEND_EVENT_CHANNEL } from '../packages/db/src/tape';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -25,6 +25,8 @@ integration('Postgres idempotency', () => {
     await db.delete(tierEvent).where(eq(tierEvent.chainId, 9_997));
     await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:tape-notify'));
     await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:chain-source'));
+    await db.delete(tierPeriod).where(eq(tierPeriod.sourceId, 'test:tier-reconstruction'));
+    await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:tier-reconstruction'));
   });
 
   afterAll(async () => {
@@ -34,6 +36,8 @@ integration('Postgres idempotency', () => {
     if (db) await db.delete(tierEvent).where(eq(tierEvent.chainId, 9_997));
     if (db) await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:tape-notify'));
     if (db) await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:chain-source'));
+    if (db) await db.delete(tierPeriod).where(eq(tierPeriod.sourceId, 'test:tier-reconstruction'));
+    if (db) await db.delete(ingestCursor).where(eq(ingestCursor.sourceId, 'test:tier-reconstruction'));
     await database?.pool.end();
   });
 
@@ -100,5 +104,23 @@ integration('Postgres idempotency', () => {
     expect(await ingestChainBatch(db, sourceId, spendRows, tierRows, cursor)).toEqual({ spendEvents: 0, tierEvents: 0 });
     expect(await finalizeChainSource(db, sourceId, 100)).toEqual({ spendEvents: 1, tierEvents: 1 });
     expect(await rewindChainSource(db, sourceId, { blockNumber: 100, blockHash: null })).toEqual({ spendEvents: 1, tierEvents: 1 });
+  });
+
+  it('atomically replaces one reconstructed tier source and its finalized cursor', async () => {
+    if (!db) throw new Error('Integration database was not initialized');
+    const sourceId = 'test:tier-reconstruction';
+    const periods = generateSyntheticDataset({ seed: sourceId, accountCount: 50 }).tierPeriods.slice(0, 4).map((period) => ({
+      ...period,
+      sourceId,
+      provenance: 'measured' as const,
+      qualifiedBy: 'unknown' as const,
+    }));
+    const cursor = { blockNumber: 321, blockHash: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' as const };
+    expect(await replaceTierPeriodsForSource(db, sourceId, periods, cursor)).toBe(periods.length);
+    expect(await replaceTierPeriodsForSource(db, sourceId, periods.slice(0, 2), cursor)).toBe(2);
+    const stored = await db.select().from(tierPeriod).where(eq(tierPeriod.sourceId, sourceId));
+    const [storedCursor] = await db.select().from(ingestCursor).where(eq(ingestCursor.sourceId, sourceId));
+    expect(stored).toHaveLength(2);
+    expect(storedCursor?.blockNumber).toBe(321);
   });
 });

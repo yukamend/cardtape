@@ -89,6 +89,7 @@ export async function loadTapeSnapshot(
       FROM tier_period AS period
       WHERE period.program_id = event.program_id
         AND period.card_account = event.card_account
+        AND period.provenance = event.provenance
         AND period.valid_from <= event.block_time
         AND (period.valid_to IS NULL OR period.valid_to > event.block_time)
       ORDER BY period.valid_from DESC
@@ -136,6 +137,7 @@ export async function loadTapeRange(
       FROM tier_period AS period
       WHERE period.program_id = event.program_id
         AND period.card_account = event.card_account
+        AND period.provenance = event.provenance
         AND period.valid_from <= event.block_time
         AND (period.valid_to IS NULL OR period.valid_to > event.block_time)
       ORDER BY period.valid_from DESC
@@ -157,11 +159,13 @@ interface TierPeriodRow {
   valid_from: Date;
   valid_to: Date | null;
   qualified_by: TierPeriod['qualifiedBy'];
+  source_id: string;
+  provenance: TierPeriod['provenance'];
 }
 
 export async function loadTierPeriods(pool: Pool, programId: string): Promise<TierPeriod[]> {
   const result = await pool.query<TierPeriodRow>(`
-    SELECT program_id, card_account, tier, valid_from, valid_to, qualified_by
+    SELECT program_id, card_account, tier, valid_from, valid_to, qualified_by, source_id, provenance
     FROM tier_period
     WHERE program_id = $1
     ORDER BY card_account, valid_from
@@ -173,7 +177,99 @@ export async function loadTierPeriods(pool: Pool, programId: string): Promise<Ti
     validFrom: row.valid_from,
     validTo: row.valid_to,
     qualifiedBy: row.qualified_by,
+    sourceId: row.source_id,
+    provenance: row.provenance,
   }));
+}
+
+export interface TierSummary {
+  sourceId: string;
+  provenance: TierPeriod['provenance'];
+  asOfBlock: number | null;
+  population: Record<Tier, number>;
+  flow30d: Record<Tier, number>;
+  history: Array<{ at: string; population: Record<Tier, number> }>;
+}
+
+interface TierSummaryRow {
+  tier: Tier;
+  population: string | number;
+  entries_30d: string | number;
+  exits_30d: string | number;
+}
+
+interface TierHistoryRow {
+  observed_at: Date;
+  tier: Tier;
+  population: string | number;
+}
+
+export async function loadTierSummary(pool: Pool, programId: string): Promise<TierSummary | null> {
+  const sourceResult = await pool.query<{ source_id: string; provenance: TierPeriod['provenance']; block_number: string | number | null }>(`
+    SELECT source.source_id, source.provenance, cursor.block_number
+    FROM (
+      SELECT source_id, provenance, count(*) AS rows
+      FROM tier_period
+      WHERE program_id = $1
+      GROUP BY source_id, provenance
+      ORDER BY CASE provenance WHEN 'measured' THEN 0 ELSE 1 END, rows DESC
+      LIMIT 1
+    ) AS source
+    LEFT JOIN ingest_cursor AS cursor ON cursor.source_id = source.source_id
+  `, [programId]);
+  const selected = sourceResult.rows[0];
+  if (!selected) return null;
+  const result = await pool.query<TierSummaryRow>(`
+    SELECT
+      tier,
+      count(*) FILTER (WHERE valid_to IS NULL) AS population,
+      count(*) FILTER (WHERE valid_from >= now() - interval '30 days') AS entries_30d,
+      count(*) FILTER (WHERE valid_to >= now() - interval '30 days') AS exits_30d
+    FROM tier_period
+    WHERE program_id = $1 AND source_id = $2
+    GROUP BY tier
+  `, [programId, selected.source_id]);
+  const population = { core: 0, luxe: 0, pinnacle: 0, vip: 0 } satisfies Record<Tier, number>;
+  const flow30d = { core: 0, luxe: 0, pinnacle: 0, vip: 0 } satisfies Record<Tier, number>;
+  for (const row of result.rows) {
+    population[row.tier] = Number(row.population);
+    flow30d[row.tier] = Number(row.entries_30d) - Number(row.exits_30d);
+  }
+  const historyResult = await pool.query<TierHistoryRow>(`
+    WITH points AS (
+      SELECT generate_series(
+        date_trunc('week', now() - interval '12 weeks'),
+        date_trunc('week', now()),
+        interval '1 week'
+      ) AS observed_at
+    )
+    SELECT points.observed_at, tiers.tier, count(period.card_account) AS population
+    FROM points
+    CROSS JOIN (VALUES ('core'), ('luxe'), ('pinnacle'), ('vip')) AS tiers(tier)
+    LEFT JOIN tier_period AS period
+      ON period.program_id = $1
+      AND period.source_id = $2
+      AND period.tier = tiers.tier
+      AND period.valid_from <= points.observed_at
+      AND (period.valid_to IS NULL OR period.valid_to > points.observed_at)
+    GROUP BY points.observed_at, tiers.tier
+    ORDER BY points.observed_at, tiers.tier
+  `, [programId, selected.source_id]);
+  const historyByTime = new Map<string, Record<Tier, number>>();
+  for (const row of historyResult.rows) {
+    const at = row.observed_at.toISOString();
+    const values = historyByTime.get(at) ?? { core: 0, luxe: 0, pinnacle: 0, vip: 0 };
+    values[row.tier] = Number(row.population);
+    historyByTime.set(at, values);
+  }
+  return {
+    sourceId: selected.source_id,
+    provenance: selected.provenance,
+    asOfBlock: selected.block_number === null ? null : Number(selected.block_number),
+    population,
+    flow30d,
+    history: [...historyByTime].map(([at, values]) => ({ at, population: values })),
+  };
 }
 
 interface NotificationEvent extends Omit<SpendEvent, 'blockTime' | 'pricedAt'> {

@@ -65,6 +65,20 @@ export interface TierPeriod {
   validFrom: Date;
   validTo: Date | null;
   qualifiedBy: TierQualification;
+  sourceId: string;
+  provenance: FactProvenance;
+}
+
+export type OnchainTier = Tier | 'business';
+
+export interface TierTransition {
+  cardAccount: `0x${string}`;
+  tier: OnchainTier;
+  at: Date;
+  blockNumber: number;
+  logIndex: number;
+  arrayIndex: number;
+  qualifiedBy: TierQualification;
 }
 
 export type TierAction = 'stake' | 'unstake' | 'deposit' | 'withdraw';

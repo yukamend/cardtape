@@ -11,6 +11,7 @@
 - `spend_event` and `tier_event` are append-only and idempotent on `(chain_id, tx_hash, log_index)`.
 - `amount_raw` is `numeric(78,0)` in Postgres and a decimal string in TypeScript. Never convert uint256 values through JavaScript `number`.
 - `tier_period` is an interval table. Starts are inclusive, ends are exclusive, and periods for an account may not overlap.
+- `tier_period.source_id` separates measured reconstruction from demo fixtures; interval joins require matching fact provenance.
 - `token_symbol`, `amount_raw`, and `settlement_ccy` are stored truth. `amount_usd` is derived, nullable, and never silently zero.
 - Cursor updates and fact inserts belong in one transaction.
 - Campaign registry changes are reviewed source changes, not runtime edits.
@@ -25,8 +26,9 @@
 - `npm run tape` — run the local Postgres `LISTEN/NOTIFY` → WebSocket broadcaster.
 - `npm run tape:dev` — run the broadcaster and replay existing demo facts without inserting rows.
 - `npm run tape:stress` — push 500 ephemeral notifications through Postgres and the local WebSocket server.
+- `npm run tiers:reconstruct` — rebuild finalized tier intervals and reconcile them against current Cash contract state.
 - `npm run typecheck` — strict TypeScript check.
 - `npm test` — unit tests; includes Postgres integration when `DATABASE_URL` is set.
 - `npm run build` — production web build.
 
-Do not add the OP Mainnet adapter, extra programs, accounts, alerts, or unrelated surfaces before the tape and estimator gates remain green.
+Do not add extra programs, individual account pages, alerts, or unrelated surfaces before the single-program numbers survive external scrutiny.

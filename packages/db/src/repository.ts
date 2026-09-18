@@ -203,6 +203,33 @@ export async function insertTierPeriods(db: Database, rows: readonly TierPeriod[
   return inserted;
 }
 
+export async function replaceTierPeriodsForSource(
+  db: Database,
+  sourceId: string,
+  rows: readonly TierPeriod[],
+  cursor: Cursor,
+): Promise<number> {
+  if (rows.some((row) => row.sourceId !== sourceId)) throw new Error('Tier-period source does not match replacement source');
+  return db.transaction(async (transaction) => {
+    await transaction.delete(tierPeriod).where(eq(tierPeriod.sourceId, sourceId));
+    let inserted = 0;
+    for (const batch of batches(rows)) {
+      const result = await transaction.insert(tierPeriod).values(batch.map((row) => ({ ...row }))).returning({ account: tierPeriod.cardAccount });
+      inserted += result.length;
+    }
+    await transaction.insert(ingestCursor).values({
+      sourceId,
+      blockNumber: cursor.blockNumber,
+      blockHash: cursor.blockHash,
+      updatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: ingestCursor.sourceId,
+      set: { blockNumber: cursor.blockNumber, blockHash: cursor.blockHash, updatedAt: new Date() },
+    });
+    return inserted;
+  });
+}
+
 export async function insertTierEvents(db: Database, rows: readonly TierEvent[]): Promise<number> {
   let inserted = 0;
   for (const batch of batches(rows)) {

@@ -21,6 +21,7 @@
     "estimate": "tsx apps/indexer/src/estimate.ts",
     "indexer": "tsx apps/indexer/src/index.ts",
     "indexer:once": "tsx apps/indexer/src/index.ts --once",
+    "tiers:reconstruct": "tsx apps/indexer/src/reconstruct-tiers.ts",
     "tape": "tsx apps/indexer/src/tape-server.ts",
     "tape:dev": "tsx apps/indexer/src/tape-server.ts --replay 8",
     "tape:stress": "tsx apps/indexer/src/tape-stress.ts",

@@ -15,6 +15,8 @@ export const OPTIMISM_SOURCE_ID = 'etherfi-cash:optimism-v1';
 
 export const OPTIMISM_CONTRACTS = {
   cashEventEmitter: '0x380B2e96799405be6e3D965f4044099891881acB',
+  cashModule: '0x7Ca0b75E67E33c0014325B739A8d019C4FE445F0',
+  etherFiSafeFactory: '0xF4e147Db314947fC1275a8CbB6Cde48c510cd8CF',
   etherFiLiquidModule: '0x427fDe7FF5D685e76f572BDFb896184a2048f232',
   etherFiLiquidModuleWithReferrer: '0xA051246A613E3216DD90402453D3B8aD63E71Cd1',
   cashbackDistributor: '0x38F2fBb259F042DE3A601E0f7135f768DE08F5A2',
@@ -88,7 +90,7 @@ function isPayload(raw: RawEvent): raw is RawEvent & { payload: OptimismLogPaylo
 
 function address(value: unknown): `0x${string}` {
   if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error(`Invalid event address: ${String(value)}`);
-  return value as `0x${string}`;
+  return value.toLowerCase() as `0x${string}`;
 }
 
 function bigint(value: unknown): bigint {

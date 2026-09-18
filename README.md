@@ -14,6 +14,7 @@ npm install
 npm run db:local:start
 npm run db:migrate
 npm run seed
+npm run tiers:reconstruct
 npm run estimate
 npm run tape
 ```
@@ -31,6 +32,8 @@ npm run dev
 ```
 
 Open `http://localhost:3000`. New OP facts normally reach the browser within one 2-second poll. Use `npm run indexer:once` for one bounded 25-block import. `npm run tape:dev` remains available as an explicit synthetic replay; it does not create fact rows. Stop the database with `npm run db:local:stop`.
+
+`npm run tiers:reconstruct` scans finalized Safe deployments and tier assignments, rebuilds measured `tier_period` intervals atomically, and fails if the reconstructed current state differs from the Cash contract. The live `/tiers` endpoint then serves current population, 30-day net flow, and a 12-week interval history to the terminal.
 
 ## Verification
 
@@ -84,3 +87,9 @@ Campaign-window shading and signature marks are derived from the versioned regis
 The adapter reads the official ether.fi Cash emitter and Liquid module deployments, keeps its cursor in Postgres, verifies the cursor block hash on restart, rewinds a bounded range on reorg, and promotes rows after 20 confirmations. Replaying a block window inserts zero rows. Contract addresses, event normalization, and operational commands are recorded in `docs/optimism.md`.
 
 Synthetic history remains labelled `demo`; OP rows are individually labelled `measured`. Campaign attribution remains inference and is not manufactured from settlement logs that do not expose merchant identity.
+
+## Tier reconstruction gate
+
+The tier job uses the official Safe factory's `BeaconProxyDeployed` event for the initial Core interval and the official Cash emitter's `SafeTiersSet` event for later transitions. It keeps Business accounts outside the four consumer membership tiers and records the qualification route as unknown because that cause is not emitted. A successful run proves both that every factory deployment is represented and that every reconstructed current tier matches `CashModule.getSafeTier` at the same finalized block. Details are in `docs/tiers.md`.
+
+The Methodology view renders campaign signature and method notes directly from `packages/core/src/campaigns.ts`. Screenshot mode (`S` or `[S]`) uses the browser print path and burns the capture time and current URL into the exported readout.

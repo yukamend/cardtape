@@ -14,6 +14,7 @@ import { createDatabase, requireDatabaseUrl } from '../../../packages/db/src/cli
 import {
   loadTapeRange,
   loadTapeSnapshot,
+  loadTierSummary,
   loadTierPeriods,
   parseSpendEventNotification,
   SPEND_EVENT_CHANNEL,
@@ -75,6 +76,20 @@ export async function startTapeServer(options: TapeServerOptions = {}): Promise<
       response.end(JSON.stringify({ ok: true, source: 'postgres', mode, clients: sockets.size }));
       return;
     }
+    if (request.url === '/tiers') {
+      void loadTierSummary(pool, PROGRAM_ID).then((summary) => {
+        response.writeHead(summary ? 200 : 404, {
+          'access-control-allow-origin': '*',
+          'cache-control': 'no-store',
+          'content-type': 'application/json',
+        });
+        response.end(JSON.stringify(summary ?? { error: 'No tier periods loaded' }));
+      }).catch((error) => {
+        response.writeHead(500, { 'access-control-allow-origin': '*', 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: String(error) }));
+      });
+      return;
+    }
     response.writeHead(404).end();
   });
   const webSockets = new WebSocketServer({ noServer: true });
@@ -107,7 +122,7 @@ export async function startTapeServer(options: TapeServerOptions = {}): Promise<
     if (notification.channel !== SPEND_EVENT_CHANNEL || !notification.payload) return;
     try {
       const event = parseSpendEventNotification(notification.payload);
-      const resolvedTier = tierAt(tierPeriods, event.cardAccount, event.blockTime);
+      const resolvedTier = tierAt(tierPeriods, event.cardAccount, event.blockTime, event.provenance);
       const tapeEvent = classifyTapeEvent(event, resolvedTier, campaigns);
       buffer.enqueue(tapeEvent);
       buffer.flush(TAPE_RING_CAPACITY);

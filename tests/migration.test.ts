@@ -23,6 +23,7 @@ describe('database migration invariants', () => {
 
   it('prevents overlapping retrospective tier intervals', () => {
     expect(sql).toMatch(/tier_period_no_overlap/);
+    expect(sql).toMatch(/"source_id" WITH =/);
     expect(sql).toMatch(/tstzrange\("valid_from", COALESCE\("valid_to", 'infinity'::timestamptz\), '\[\)'\) WITH &&/);
   });
 });

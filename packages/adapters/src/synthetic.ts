@@ -188,7 +188,16 @@ function createTierFacts(accounts: readonly SyntheticAccount[], seed: string): {
   for (const account of accounts) {
     account.transitions.forEach((transition, index) => {
       const next = account.transitions[index + 1];
-      periods.push({ programId: PROGRAM_ID, cardAccount: account.address, tier: transition.tier, validFrom: transition.at, validTo: next?.at ?? null, qualifiedBy: transition.qualifiedBy });
+      periods.push({
+        programId: PROGRAM_ID,
+        cardAccount: account.address,
+        tier: transition.tier,
+        validFrom: transition.at,
+        validTo: next?.at ?? null,
+        qualifiedBy: transition.qualifiedBy,
+        sourceId: 'synthetic:tier-periods',
+        provenance: 'demo',
+      });
       if (index === 0) return;
       const previous = account.transitions[index - 1];
       if (!previous) return;

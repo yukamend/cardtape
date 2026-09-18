@@ -90,13 +90,17 @@ export const tierPeriod = pgTable(
     validFrom: timestamp('valid_from', { withTimezone: true, mode: 'date' }).notNull(),
     validTo: timestamp('valid_to', { withTimezone: true, mode: 'date' }),
     qualifiedBy: text('qualified_by').$type<TierQualification>().notNull(),
+    sourceId: text('source_id').notNull(),
+    provenance: text('provenance').$type<FactProvenance>().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.programId, table.cardAccount, table.validFrom] }),
+    primaryKey({ columns: [table.programId, table.cardAccount, table.validFrom, table.sourceId] }),
     check('tier_period_date_order', sql`${table.validTo} IS NULL OR ${table.validTo} > ${table.validFrom}`),
     check('tier_period_tier_check', sql`${table.tier} IN ('core', 'luxe', 'pinnacle', 'vip')`),
     check('tier_period_qualification_check', sql`${table.qualifiedBy} IN ('sethfi', 'liquid', 'points', 'paid', 'unknown')`),
+    check('tier_period_provenance_check', sql`${table.provenance} IN ('measured', 'demo')`),
     index('tier_period_account_interval_idx').on(table.programId, table.cardAccount, table.validFrom, table.validTo),
+    index('tier_period_source_current_idx').on(table.sourceId, table.validTo),
   ],
 );
 
