@@ -1,12 +1,12 @@
 # CARDTAPE
 
-CARDTAPE is a crypto-card campaign effectiveness terminal. The current local implementation covers one program, ether.fi Cash, with a versioned campaign registry, append-only settlement facts, retrospective tier intervals, deterministic synthetic history, database-enforced provenance, verified campaign estimators, a live OP Mainnet adapter, and a local Postgres-to-WebSocket settlement tape.
+CARDTAPE is a crypto-card campaign effectiveness terminal. Its published readouts are snapshots of onchain evidence from ether.fi Cash on Optimism and Plasma One's XPL lock vault on Plasma. The synthetic dataset remains available for tests and explicit demo replay, but is excluded from published snapshots.
 
 All generated fixture rows carry `provenance = 'demo'`. They are test data, not claims about live card activity.
 
-## Local setup
+## Optional local PostgreSQL archive
 
-Requirements: Node.js 22+, npm, and PostgreSQL 16+. The repository includes a local Postgres lifecycle script and uses port `54329` so it does not collide with a default installation.
+The published site and regular snapshot updates need Node.js 22+ and npm, but no database. PostgreSQL 16+ is only needed to recreate the original historical archive, run database integration tests, or perform the one-time checkpoint conversion. The optional local Postgres script uses port `54329`.
 
 ```bash
 cp .env.example .env
@@ -37,13 +37,46 @@ Open `http://localhost:3000`. New OP facts normally reach the browser within one
 
 `npm run audit:optimism -- --blocks 1000` performs a read-only, field-for-field comparison between a finalized raw Optimism window and the persisted spend, cashback, and tier-position facts. Pass `--through-block N` to reproduce a previously published audit range exactly.
 
+`npm run backfill:optimism -- --from-block N --through-block N` idempotently loads a finalized historical range without moving the continuous indexer's cursor. Use it to load campaign windows before recomputing measured results. The new rolling ether.fi Cash monitor compares the latest 24 hours with the preceding 24 hours and updates from finalized measured events. Historical campaign KPIs remain blank until both windows are fully covered. The 2025 Membership Rewards and early-2026 Lunar New Year campaigns predate the current Cash v3 emitter; those require a separate, verified legacy onchain adapter, not the existing backfill command.
+
+The Plasma One snapshot queries `Locked` events from `0xe035a6a5aba726bd162e273a22ff85ae5f6e04c3` through `PLASMA_RPC_URL`. A lock of at least 100,000 WXPL is shown as a Platinum-sized lock proxy. Smaller top-ups can also qualify, and the vault does not prove signup, card activation, purchases, or FX fees. The displayed comparison is descriptive, not proof that the Platinum fee change caused lock activity.
+
+## Publish a snapshot without PostgreSQL
+
+The published website reads `public/snapshots/current.json`. Future updates use Optimism and Plasma RPC plus a compressed local checkpoint in `.cardtape/snapshot-state.json.gz`; PostgreSQL and the continuous indexer are not needed. On the existing laptop, the initial snapshot and checkpoint were converted once from the completed local backfill. For another checkout with the published snapshot but no checkpoint, initialize from Optimism RPC with `npm run snapshot:init:rpc` (the first scan covers about 50 hours).
+
+To update and publish:
+
+```bash
+npm run snapshot:generate
+git add public/snapshots/current.json
+git commit -m "Publish onchain snapshot"
+git push
+```
+
+`snapshot:generate` catches up from the saved finalized Optimism block, retains only about 50 hours of detailed spend records in the local compressed checkpoint, computes the rolling Cash readout, and scans Plasma for the 7, 14, and 30-day comparisons. The published JSON includes 500 recent finalized measured tape events and the fixed historical iPhone readout from the original verified backfill. The checkpoint is roughly 8 MB and is ignored by Git; only the small public JSON is committed. If generation fails, the previous published snapshot stays in place. The command saves progress while scanning, so a later run can resume.
+
+Tier classifications retain the timestamp of the earlier onchain reconstruction; newer tape events have an unknown tier rather than an unverified label. The website continues showing the last published snapshot when the laptop is off. Publishing a newer one requires a Git push and Vercel deployment. No hosted database, local database service, tunnel, or GitHub database secret is needed. Never commit `.env`, `.cardtape`, or raw PostgreSQL dumps.
+
+The one-time conversion commands for an existing PostgreSQL backfill are `npm run snapshot:generate:from-db` followed by `npm run snapshot:bootstrap`. They are not part of regular publishing.
+
+## GitHub + Vercel deployment
+
+The web app is built for Vercel with `npm run build:vercel`; the Nitro build emits Vercel Build Output API artifacts. The Vercel project should use the `Other` framework preset, keep the repository root as the project root, and use the committed `vercel.json` build command. It serves the UI and the checked-in snapshot without a database connection.
+
+1. Create a public GitHub repository, push the application and an initial snapshot, and connect the repository to Vercel.
+2. Leave `DATABASE_URL`, `NEXT_PUBLIC_TAPE_API_URL`, and `NEXT_PUBLIC_TAPE_WS_URL` unset in Vercel. `DATABASE_URL` is only needed for the one-time conversion or optional local database workflows.
+3. Add `cardtape.bimlabs.xyz` as the Vercel production domain. At the DNS provider, create the CNAME Vercel shows for that project, then wait for domain verification and certificate issuance.
+
+The public GitHub repository is `yukamend/cardtape`. The snapshot generator runs locally and publishes through a normal Git push; no hosted database is required.
+
 ## Verification
 
 ```bash
 npm run typecheck
 npm test
 npm run tape:stress
-npm run build
+npm run build:vercel
 ```
 
 With local Postgres running, `npm test` also executes the database integration test. Running `npm run seed` repeatedly is safe: immutable facts use conflict-free primary keys and the row counts do not change.
@@ -52,7 +85,7 @@ With local Postgres running, `npm test` also executes the database integration t
 
 - `packages/core` — domain types, campaign registry, tier ladder, interval rules, estimators, tape classification, and frame buffer.
 - `packages/db` — Drizzle schema, migrations, database client, idempotent write paths, and tape snapshot queries.
-- `packages/adapters` — deterministic 18-month synthetic source plus the measured OP Mainnet adapter.
+- `packages/adapters` — measured Optimism and Plasma adapters, plus a synthetic source used only for tests and explicit demo replay.
 - `apps/indexer` — migration, seed, estimator, indexer, and WebSocket broadcaster entry points.
 - `tests` — deterministic generation, idempotency, tier intervals, money, registry, estimators, tape backpressure, and Postgres integration checks.
 

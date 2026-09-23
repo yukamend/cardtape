@@ -1,5 +1,5 @@
 import { sites } from '@openai/sites-vite-plugin';
-import tailwindcss from '@tailwindcss/postcss';
+import tailwindcss from '@tailwindcss/vite';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
 import hostingConfig from './.openai/hosting.json';
@@ -35,6 +35,7 @@ const localBindingConfig = {
 };
 
 export default defineConfig(async () => {
+  const isVercelBuild = process.env.VERCEL === '1' || process.env.NITRO_PRESET === 'vercel';
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= 'false';
@@ -42,20 +43,20 @@ export default defineConfig(async () => {
   process.env.MINIFLARE_REGISTRY_PATH ??= '.wrangler/registry';
 
   // Wrangler snapshots its log path while the Cloudflare plugin is imported.
-  const { cloudflare } = await import('@cloudflare/vite-plugin');
+  const platformPlugins = isVercelBuild
+    ? [(await import('nitro/vite')).nitro()]
+    : [
+        sites(),
+        (await import('@cloudflare/vite-plugin')).cloudflare({
+          viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
+          config: localBindingConfig,
+        }),
+      ];
 
   return {
-    css: { postcss: { plugins: [tailwindcss()] } },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
-    plugins: [
-      vinext(),
-      sites(),
-      cloudflare({
-        viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
-        config: localBindingConfig,
-      }),
-    ],
+    plugins: [tailwindcss(), vinext(), ...platformPlugins],
   };
 });

@@ -7,11 +7,13 @@ import {
   type TapeEvent,
   type TapeMessage,
 } from '../packages/core/src/tape';
+import { isPublishedSnapshot, type PublishedSnapshot } from '../packages/core/src/published-snapshot';
 
 export type TapeConnection = 'connecting' | 'connected' | 'disconnected';
 
 export interface TapeFeed {
   rows: TapeEvent[];
+  snapshot: PublishedSnapshot | null;
   connection: TapeConnection;
   mode: 'live' | 'demo-replay';
   received: number;
@@ -19,9 +21,7 @@ export interface TapeFeed {
 }
 
 function tapeUrl(): string {
-  if (process.env.NEXT_PUBLIC_TAPE_WS_URL) return process.env.NEXT_PUBLIC_TAPE_WS_URL;
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:8788/tape`;
+  return process.env.NEXT_PUBLIC_TAPE_WS_URL as string;
 }
 
 export function useTapeFeed(paused: boolean): TapeFeed {
@@ -29,8 +29,9 @@ export function useTapeFeed(paused: boolean): TapeFeed {
   const pausedRef = useRef(paused);
   const frameRef = useRef<number | null>(null);
   const [rows, setRows] = useState<TapeEvent[]>([]);
+  const [snapshot, setSnapshot] = useState<PublishedSnapshot | null>(null);
   const [connection, setConnection] = useState<TapeConnection>('connecting');
-  const [mode, setMode] = useState<'live' | 'demo-replay'>('demo-replay');
+  const [mode, setMode] = useState<'live' | 'demo-replay'>('live');
   const [received, setReceived] = useState(0);
   const [pending, setPending] = useState(0);
 
@@ -44,6 +45,30 @@ export function useTapeFeed(paused: boolean): TapeFeed {
   }, [buffer, paused]);
 
   useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_TAPE_WS_URL) {
+      let closed = false;
+      const poll = async () => {
+        try {
+          const response = await fetch('/snapshots/current.json', { cache: 'no-store' });
+          if (!response.ok) throw new Error(`Snapshot returned ${response.status}`);
+          const next: unknown = await response.json();
+          if (!isPublishedSnapshot(next)) throw new Error('Invalid published snapshot');
+          if (!closed) {
+            buffer.replace(next.tape);
+            setSnapshot(next);
+            setRows(buffer.snapshot());
+            setReceived(next.tape.length);
+            setPending(0);
+            setConnection('connected');
+          }
+        } catch {
+          if (!closed) setConnection('disconnected');
+        }
+      };
+      void poll();
+      const timer = window.setInterval(() => void poll(), 60_000);
+      return () => { closed = true; window.clearInterval(timer); };
+    }
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
@@ -100,5 +125,5 @@ export function useTapeFeed(paused: boolean): TapeFeed {
     };
   }, [buffer]);
 
-  return { rows, connection, mode, received, pending };
+  return { rows, snapshot, connection, mode, received, pending };
 }

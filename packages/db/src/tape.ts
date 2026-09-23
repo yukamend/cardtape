@@ -61,6 +61,8 @@ export async function loadTapeSnapshot(
   programId: string,
   asOf: Date,
   limit = 500,
+  provenance?: 'measured' | 'demo',
+  finalizedOnly = false,
 ): Promise<TapeSnapshotRecord[]> {
   const result = await pool.query<SnapshotRow>(`
     SELECT
@@ -97,9 +99,11 @@ export async function loadTapeSnapshot(
     ) AS account_tier ON true
     WHERE event.program_id = $1
       AND event.block_time <= $2
+      AND ($4::text IS NULL OR event.provenance = $4)
+      AND (NOT $5::boolean OR event.finalized = true)
     ORDER BY event.block_time DESC, event.block_number DESC, event.log_index DESC
     LIMIT $3
-  `, [programId, asOf, limit]);
+  `, [programId, asOf, limit, provenance ?? null, finalizedOnly]);
   return result.rows.map(rowToRecord);
 }
 

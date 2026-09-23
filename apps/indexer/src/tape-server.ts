@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket, WebSocketServer } from 'ws';
 import { campaigns, PROGRAM_ID } from '../../../packages/core/src/campaigns';
+import { CampaignRequestError, getCampaignImpact, parseCampaignQuery } from '../../../packages/server/src/campaigns';
 import {
   classifyTapeEvent,
   TapeFrameBuffer,
@@ -66,14 +67,31 @@ export async function startTapeServer(options: TapeServerOptions = {}): Promise<
     ? campaigns.find((campaign) => campaign.startsAt <= asOf && campaign.endsAt > asOf)
     : undefined;
   const snapshotAsOf = replayCampaign?.startsAt ?? asOf;
-  const snapshotRecords = await loadTapeSnapshot(pool, PROGRAM_ID, snapshotAsOf, TAPE_RING_CAPACITY);
+  const snapshotRecords = await loadTapeSnapshot(pool, PROGRAM_ID, snapshotAsOf, TAPE_RING_CAPACITY, mode === 'live' ? 'measured' : 'demo');
   const buffer = new TapeFrameBuffer(TAPE_RING_CAPACITY);
   buffer.replace(snapshotRecords.map((record) => classifyTapeEvent(record.event, record.tier, campaigns)));
 
   const server = createServer((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
     if (request.url === '/health') {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ ok: true, source: 'postgres', mode, clients: sockets.size }));
+      return;
+    }
+    if (url.pathname.startsWith('/campaigns/')) {
+      void (async () => {
+        const campaignId = decodeURIComponent(url.pathname.slice('/campaigns/'.length));
+        return getCampaignImpact(pool, parseCampaignQuery(campaignId, url.searchParams));
+      })().then((impact) => {
+        response.writeHead(200, { 'access-control-allow-origin': '*', 'cache-control': 'no-store', 'content-type': 'application/json' });
+        response.end(JSON.stringify(impact));
+      }).catch((error) => {
+        const message = String(error);
+        const status = error instanceof CampaignRequestError || /Invalid|Unknown|does not match/.test(message) ? 400 : 503;
+        response.writeHead(status, { 'access-control-allow-origin': '*', 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: status === 400 ? message : 'Onchain campaign source is temporarily unavailable' }));
+        if (status === 503) process.stderr.write(`Campaign source failed: ${message}\n`);
+      });
       return;
     }
     if (request.url === '/tiers') {
@@ -122,6 +140,8 @@ export async function startTapeServer(options: TapeServerOptions = {}): Promise<
     if (notification.channel !== SPEND_EVENT_CHANNEL || !notification.payload) return;
     try {
       const event = parseSpendEventNotification(notification.payload);
+      if (mode === 'live' && event.provenance !== 'measured') return;
+      if (mode === 'demo-replay' && event.provenance !== 'demo') return;
       const resolvedTier = tierAt(tierPeriods, event.cardAccount, event.blockTime, event.provenance);
       const tapeEvent = classifyTapeEvent(event, resolvedTier, campaigns);
       buffer.enqueue(tapeEvent);

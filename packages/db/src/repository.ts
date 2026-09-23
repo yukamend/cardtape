@@ -74,6 +74,26 @@ export async function insertSpendEvents(db: Database, rows: readonly SpendEvent[
   return inserted;
 }
 
+export async function insertChainFacts(
+  db: Database,
+  spendRows: readonly SpendEvent[],
+  tierRows: readonly TierEvent[],
+): Promise<ChainIngestResult> {
+  return db.transaction(async (transaction) => {
+    let insertedSpend = 0;
+    let insertedTier = 0;
+    for (const batch of batches(deduplicateSpendEvents(spendRows))) {
+      const result = await transaction.insert(spendEvent).values(spendValues(batch)).onConflictDoNothing().returning({ txHash: spendEvent.txHash });
+      insertedSpend += result.length;
+    }
+    for (const batch of batches(tierRows)) {
+      const result = await transaction.insert(tierEvent).values(batch.map((row) => ({ ...row }))).onConflictDoNothing().returning({ txHash: tierEvent.txHash });
+      insertedTier += result.length;
+    }
+    return { spendEvents: insertedSpend, tierEvents: insertedTier };
+  });
+}
+
 export async function ingestSpendBatch(db: Database, sourceId: string, rows: readonly SpendEvent[], cursor: Cursor): Promise<number> {
   return db.transaction(async (transaction) => {
     let inserted = 0;

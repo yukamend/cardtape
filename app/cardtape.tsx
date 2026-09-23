@@ -1,205 +1,198 @@
 'use client';
 
-/* oxlint-disable jsx-a11y/prefer-tag-over-role, jsx-a11y/no-interactive-element-to-noninteractive-role */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role, next/no-img-element */
 
-import { memo, useEffect, useState, type ReactNode } from 'react';
-import { campaigns as campaignRegistry } from '../packages/core/src/campaigns';
-import type { TapeEvent } from '../packages/core/src/tape';
-import { tierLadder } from '../packages/core/src/tiers';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  ArrowLeft, ArrowRight, Check, ChevronDown, CircleAlert, Database, Landmark,
+  Minus, ShieldCheck, TrendingDown, TrendingUp,
+} from 'lucide-react';
+import { snapshotImpact } from '../packages/core/src/published-snapshot';
+import {
+  dataSources, getCampaignsForNeobank, getNeobank, getNeobankCampaign, neobanks,
+  type CampaignImpact, type CampaignMetric, type EvidenceKind, type ImpactVerdict,
+  type NeobankCampaign,
+} from '../packages/core/src/neobanks';
 import { useTapeFeed, type TapeFeed } from './use-tape-feed';
-import { useTierSummary, type TierSummary } from './use-tier-summary';
 
-type View = 'campaigns' | 'tape' | 'baseline' | 'tiers' | 'methodology' | 'detail';
-type Provenance = 'measured' | 'inferred' | 'estimated' | 'demo';
+type View =
+  | { page: 'overview' }
+  | { page: 'neobank'; neobankId: string }
+  | { page: 'campaign'; neobankId: string; campaignId: string }
+  | { page: 'methodology' };
 
-const campaigns = [
-  { id:'iphone', registryId:'etherfi-iphone18-preorder', status:'LIVE', name:'IPHONE 18 PRE-ORDER', short:'IPHONE 18', window:'SEP 12—18', mechanic:'CASHBACK LOTTERY', tiers:'LUXE · PINNACLE · VIP', budget:'$100,000', lift:'+31.8%', cost:'PENDING', retention:'TRACKING', source:'ETHER.FI / EVENTS / IPHONE 18' },
-  { id:'lunar', registryId:'etherfi-lunar-new-year-2026', status:'SETTLED', name:'LUNAR NEW YEAR 2026', short:'LUNAR NEW YEAR', window:'FEB 08—28', mechanic:'REFERRAL CASHBACK', tiers:'NEW · APAC', budget:'$20,000', lift:'+18.4%', cost:'$16,842', retention:'41.2%', source:'ETHER.FI / EVENTS / LUNAR NEW YEAR' },
-  { id:'membership', registryId:'etherfi-membership-rewards-2025', status:'SETTLED', name:'MEMBERSHIP REWARDS', short:'MEMBERSHIP REWARDS', window:'JUN—AUG 25', mechanic:'TIER CASHBACK', tiers:'CORE → VIP', budget:'VARIABLE', lift:'—', cost:'$48,320', retention:'36.7%', source:'ETHER.FI / EVENTS / MEMBERSHIP REWARDS' },
-] as const;
+const DAY = 86_400_000;
 
 export default function Cardtape() {
-  const [view,setView] = useState<View>('campaigns');
-  const [currency,setCurrency] = useState('USD');
-  const [windowRange,setWindowRange] = useState('7D');
-  const [paused,setPaused] = useState(false);
-  const [selectedCampaign,setSelectedCampaign] = useState('iphone');
-  const [rightOpen,setRightOpen] = useState(true);
-  const [screenshotAt,setScreenshotAt] = useState('');
-  const [sourceUrl,setSourceUrl] = useState('');
-  const tape = useTapeFeed(paused);
-
-  const printScreenshot = () => {
-    setScreenshotAt(new Date().toISOString());
-    setSourceUrl(window.location.href);
-    window.setTimeout(() => window.print(), 0);
-  };
-
+  const [view, setView] = useState<View>({ page: 'overview' });
+  const tape = useTapeFeed(false);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === 's' && !event.metaKey && !event.ctrlKey) printScreenshot();
-      if (event.code === 'Space' && view === 'tape') { event.preventDefault(); setPaused((current) => !current); }
-      if (event.key === 'Escape' && view === 'detail') setView('campaigns');
-    };
-    window.addEventListener('keydown',onKey);
-    return () => window.removeEventListener('keydown',onKey);
-  },[view]);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [view]);
+  const openNeobank = (neobankId: string) => setView({ page: 'neobank', neobankId });
+  const openCampaign = (campaign: NeobankCampaign) => setView({ page: 'campaign', neobankId: campaign.neobankId, campaignId: campaign.id });
 
-  const selected = campaigns.find((campaign) => campaign.id === selectedCampaign) ?? campaigns[0];
-  const openCampaign = (id: string) => { setSelectedCampaign(id); setView('detail'); };
-
-  return <main className="terminal-shell">
-    <header className="topbar">
-      <button className="wordmark" onClick={() => setView('campaigns')}>CARDTAPE<span className="version">/0.1</span></button>
-      <div className="ticker"><span>ETHFI</span><b>$0.7421</b><i>+2.81%</i><span className="ticker-sep">BTC</span><b>$108,420</b><i>+0.64%</i></div>
-      <nav className="windows" aria-label="Time window">{['1H','24H','7D','30D','ALL'].map((item)=><button key={item} className={item===windowRange?'active':''} onClick={()=>setWindowRange(item)}>{item}</button>)}</nav>
-      <div className="header-actions"><button aria-label={paused?'Resume tape':'Pause tape'} onClick={()=>setPaused(!paused)}>{paused?'RESUME':'PAUSE'}</button><button aria-label="Print screenshot mode" onClick={printScreenshot}>[S]</button><span className={`live ${tape.connection==='connected'?'':'offline'}`}><span className="live-dot"/>{tape.connection==='connected'?'WS · OP':'WS · OFFLINE'}</span></div>
-    </header>
-    <div className="demo-banner">{tape.mode==='live'
-      ? 'MIXED DATA · LIVE OP SETTLEMENT TAPE · CAMPAIGN ANALYTICS REMAIN LABELED DEMO / ESTIMATED'
-      : 'DEMO DATA · SYNTHETIC SETTLEMENTS · VALUES ARE NOT CLAIMS ABOUT LIVE ACTIVITY'}</div>
-    <div className={`workspace ${rightOpen?'':'right-closed'}`}>
-      <LeftRail view={view} setView={setView} openCampaign={openCampaign} selectedCampaign={selectedCampaign}/>
-      <section className="main-panel">
-        {view==='campaigns' && <CampaignIndex onOpen={openCampaign} currency={currency} setCurrency={setCurrency} tape={tape}/>}
-        {view==='detail' && <CampaignDetail campaign={selected} onBack={()=>setView('campaigns')} currency={currency} setCurrency={setCurrency} tape={tape}/>}
-        {view==='tape' && <TapeView paused={paused} setPaused={setPaused} tape={tape}/>}
-        {view==='baseline' && <BaselineView currency={currency} setCurrency={setCurrency}/>} 
-        {view==='tiers' && <TierView/>}
-        {view==='methodology' && <MethodologyView/>}
-      </section>
-      {rightOpen && <ContextRail campaign={selected} onOpen={()=>openCampaign(selected.id)} onClose={()=>setRightOpen(false)}/>} 
-      {!rightOpen && <button className="rail-reopen" onClick={()=>setRightOpen(true)} aria-label="Open context panel">‹</button>}
-    </div>
-    <Footer tape={tape}/>
-    <div className="screenshot-stamp">CARDTAPE · AS OF {screenshotAt || 'CAPTURE TIME'} · {sourceUrl || 'LOCAL'}</div>
-  </main>;
-}
-
-function LeftRail({view,setView,openCampaign,selectedCampaign}:{view:View;setView:(view:View)=>void;openCampaign:(id:string)=>void;selectedCampaign:string}) {
-  const nav: Array<[View,string]> = [['campaigns','CAMPAIGNS'],['tape','TAPE'],['baseline','BASELINE'],['tiers','TIERS'],['methodology','METHODOLOGY']];
-  return <aside className="left-rail"><div className="rail-label">VIEWS</div>{nav.map(([id,label],index)=><button key={id} className={(view===id||(view==='detail'&&id==='campaigns'))?'selected':''} onClick={()=>setView(id)}><span>0{index+1}</span>{label}</button>)}<div className="rail-label campaigns-label">CAMPAIGNS / 03</div>{campaigns.map((campaign)=><button key={campaign.id} className={`campaign-link ${selectedCampaign===campaign.id&&view==='detail'?'selected':''}`} onClick={()=>openCampaign(campaign.id)}>{campaign.status==='LIVE'&&<span className="live-dot"/>}{campaign.short}</button>)}</aside>;
-}
-
-function CampaignIndex({onOpen,currency,setCurrency,tape}:{onOpen:(id:string)=>void;currency:string;setCurrency:(value:string)=>void;tape:TapeFeed}) {
-  const signatureCount = tape.rows.filter((event) => event.signatureCampaignIds.length > 0).length;
-  return <>
-    <PageHeading eyebrow="ETHER.FI CASH / CAMPAIGN INDEX" title="EVERY PROMO. WHAT IT MOVED. WHAT IT COST." meta={<>AS OF 2026-09-17 08:42:16 UTC<br/><span>6,284 SETTLEMENTS / 7D</span></>}/>
-    <div className="control-line"><span>PROGRAM <b>ETHER.FI CASH</b></span><Denomination value={currency} setValue={setCurrency}/></div>
-    <div className="stat-grid"><Stat label="ACTIVE CAMPAIGNS" value="01" note="CLOSES IN 1D 15H" provenance="demo" live/><Stat label="SPEND / 7D" value="$1.84M" note="SETTLEMENTS" provenance="measured"/><Stat label="ACTIVE CARDS / 7D" value="2,418" note="UNIQUE ACCOUNTS" provenance="measured"/><Stat label="MEDIAN TICKET" value="$84.20" note="SETTLEMENT VALUE" provenance="measured"/></div>
-    <div className="table-title"><span>CAMPAIGN LEAGUE TABLE</span><span>SELECT A ROW FOR FULL READOUT ↗</span></div>
-    <div className="campaign-table" role="table" aria-label="Campaign performance"><div className="table-row table-head" role="row"><span>STATE</span><span>CAMPAIGN</span><span>WINDOW</span><span>MECHANIC</span><span>ELIGIBLE</span><span>BUDGET</span><span>LIFT</span><span>COST</span><span>12W PERSIST.</span></div>{campaigns.map((campaign)=><button className="table-row" role="row" key={campaign.id} onClick={()=>onOpen(campaign.id)}><span className={campaign.status==='LIVE'?'status-live':'status'}>{campaign.status==='LIVE'&&<span className="live-dot"/>}{campaign.status}</span><strong>{campaign.name}</strong><span>{campaign.window}</span><span>{campaign.mechanic}</span><span>{campaign.tiers}</span><span className="num">{campaign.budget}</span><span className={`num ${campaign.lift==='—'?'muted':'positive'}`}>{campaign.lift==='—'?'— NO EFFECT':campaign.lift}</span><span className="num">{campaign.cost}</span><span className="num">{campaign.retention}</span></button>)}</div>
-    <div className="bottom-grid"><Panel title="SETTLEMENT VOLUME / 7D" meta={currency}><LineChart/></Panel><Panel title="LIVE TAPE" meta={`${signatureCount} SIGNATURE MATCHES`}><TapeExcerpt rows={tape.rows} limit={5}/></Panel></div>
-  </>;
-}
-
-function CampaignDetail({campaign,onBack,currency,setCurrency,tape}:{campaign:(typeof campaigns)[number];onBack:()=>void;currency:string;setCurrency:(value:string)=>void;tape:TapeFeed}) {
-  const noEffect=campaign.id==='membership';
-  return <>
-    <button className="back-link" onClick={onBack}>← CAMPAIGN INDEX</button>
-    <div className="campaign-header"><div><div className="eyebrow">ETHER.FI CASH / CAMPAIGN READOUT / <span className={campaign.status==='LIVE'?'accent-text':''}>{campaign.status}</span></div><h1>{campaign.name}</h1><div className="badges inline"><Provenance type="demo"/><span>{campaign.mechanic}</span><span>{campaign.tiers}</span></div></div><div className="campaign-meta"><Denomination value={currency} setValue={setCurrency}/><div><span>WINDOW</span><b>{campaign.window}, 2026</b></div><div><span>STATED BUDGET</span><b>{campaign.budget}</b></div><a href={campaign.id==='iphone'?'https://etherfi.gitbook.io/etherfi/events/events/apple-iphone-18-pre-order-promo':'https://etherfi.gitbook.io/etherfi/events/events/lunar-new-year-2026'} target="_blank" rel="noreferrer">SOURCE ↗</a></div></div>
-    {campaign.status==='LIVE'&&<div className="live-callout"><span><span className="live-dot"/>WINDOW CLOSES IN</span><b>01D : 15H : 17M</b><span>PAYOUT SCHEDULED 2026-11-01</span></div>}
-    <SectionTitle n="01" title="PRE-TRENDS / PARALLEL-TRENDS CHECK" meta="8 WEEKS BEFORE → CAMPAIGN WINDOW"/>
-    <div className="chart-panel tall"><TrendChart/><div className="chart-caption"><Provenance type="estimated"/>Eligible and control cohorts moved in parallel before the window. The shaded band marks the campaign; demo series shown.</div></div>
-    <SectionTitle n="02" title="VERDICT" meta="THE FOUR NUMBERS THAT MATTER"/>
-    <div className="stat-grid verdict"><Stat label="CAUSAL LIFT" value={noEffect?'—':campaign.lift} note={noEffect?'NO DETECTABLE EFFECT':'95% CI +18.6—44.9%'} provenance="estimated"/><Stat label="MEASURED COST" value={campaign.cost} note={campaign.status==='LIVE'?'PAYOUT NOT YET DUE':'ON-CHAIN DISBURSEMENT'} provenance="measured"/><Stat label="COST / INCR. TXN" value={campaign.status==='LIVE'?'PENDING':'$28.41'} note="CAUSAL DENOMINATOR" provenance="estimated"/><Stat label="12W PERSISTENCE" value={campaign.retention} note={campaign.status==='LIVE'?'COHORT MATURING':'STILL SPENDING'} provenance="estimated"/></div>
-    <div className="analysis-grid"><div><SectionTitle n="03" title="SIGNATURE MATCH" meta="TICKET DISTRIBUTION"/><div className="chart-panel"><Histogram/><div className="chart-caption"><Provenance type="inferred"/>Settlements ≥ $1,000 from eligible tiers. Merchant identity is not visible on-chain.</div></div></div><div><SectionTitle n="04" title="ACQUISITION" meta="FIRST-SPEND ACCOUNTS"/><div className="metric-list"><MetricRow label="NEW CARDS / WINDOW" value="184" type="measured"/><MetricRow label="REACTIVATED CARDS" value="73" type="estimated"/><MetricRow label="LUXE + SHARE" value="62.4%" type="measured"/><MetricRow label="COST / NEW CARD" value="PENDING" type="estimated"/></div></div></div>
-    <div className="analysis-grid"><div><SectionTitle n="05" title="TIER MIGRATION" meta="14D RUN-UP → WINDOW"/><div className="chart-panel"><FlowChart/></div></div><div><SectionTitle n="06" title="TOKEN EVENT STUDY" meta="BETA-ADJUSTED RETURN"/><div className="chart-panel"><EventChart/><div className="chart-caption"><Provenance type="estimated"/>ETHFI return minus estimated market beta. Announcement day = 0.</div></div></div></div>
-    <SectionTitle n="07" title="PERSISTENCE" meta="CAMPAIGN COHORT VS BASELINE"/><div className="chart-panel tall"><PersistenceChart/><div className="chart-caption"><Provenance type="estimated"/>Share of acquired or reactivated cards still spending. Weeks 8 and 12 are pending for live cohorts.</div></div>
-    <SectionTitle n="08" title="SIGNATURE-MATCHED TAPE" meta="RAW SETTLEMENT EVIDENCE"/><div className="full-tape"><TapeTable rows={tape.rows.filter((event) => event.signatureCampaignIds.includes(campaign.registryId)).slice(0,6)}/></div>
-  </>;
-}
-
-function TapeView({paused,setPaused,tape}:{paused:boolean;setPaused:(value:boolean)=>void;tape:TapeFeed}) {
-  const [filter,setFilter] = useState<'all'|'signature'|'spend'>('all');
-  const rows = tape.rows.filter((event) => filter==='all' || (filter==='signature' ? event.signatureCampaignIds.length > 0 : event.eventType==='spend'));
-  const feedState = paused
-    ? `PAUSED · ${tape.pending} QUEUED`
-    : tape.connection==='connected'
-      ? `${tape.mode==='demo-replay'?'DEMO REPLAY':'LIVE'} · ${tape.received} RECEIVED`
-      : tape.connection.toUpperCase();
-  const adapterLabel = tape.mode==='demo-replay' ? 'SYNTHETIC ADAPTER' : 'OP MAINNET ADAPTER';
-  return <>
-    <PageHeading eyebrow="ETHER.FI CASH / SETTLEMENT TAPE" title="RAW SETTLEMENTS. CAMPAIGN SIGNATURES MARKED." meta={<>POSTGRES → WEBSOCKET / {adapterLabel}<br/><span>{feedState}</span></>}/>
-    <div className="control-line"><span>ROWS <b>{rows.length} / 500 RING BUFFER</b></span><div className="segmented"><button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>ALL</button><button className={filter==='signature'?'active':''} onClick={()=>setFilter('signature')}>SIGNATURE</button><button className={filter==='spend'?'active':''} onClick={()=>setFilter('spend')}>SPEND</button><button onClick={()=>setPaused(!paused)}>{paused?'RESUME [SPACE]':'PAUSE [SPACE]'}</button></div></div>
-    <div className={`full-tape ${paused?'paused':''}`}><TapeTable rows={rows}/></div>
-    <div className="method-note"><Provenance type={tape.mode==='demo-replay'?'demo':'measured'}/>Rows stream from Postgres through the local WebSocket server. Campaign-window shading and signature marks are registry-derived; merchant identity remains unavailable.</div>
-  </>;
-}
-
-function BaselineView({currency,setCurrency}:{currency:string;setCurrency:(value:string)=>void}) { return <><PageHeading eyebrow="ETHER.FI CASH / PROGRAM BASELINE" title="SPEND, CARDS AND TICKET SHAPE OVER TIME." meta={<>18 MONTH SYNTHETIC HISTORY<br/><span>CAMPAIGN WINDOWS SHADED</span></>}/><div className="control-line"><span>ROLLUP <b>DAILY / FINALIZED</b></span><Denomination value={currency} setValue={setCurrency}/></div><div className="stat-grid"><Stat label="SETTLED VOLUME / 30D" value="$6.82M" note="+12.4% VS PRIOR" provenance="measured"/><Stat label="ACTIVE CARDS / 30D" value="4,921" note="+8.1% VS PRIOR" provenance="measured"/><Stat label="TXN / ACTIVE CARD" value="8.41" note="MONTHLY" provenance="estimated"/><Stat label="UNPRICED VOLUME" value="0.03%" note="NEVER COERCED TO ZERO" provenance="measured"/></div><SectionTitle n="01" title="SETTLEMENT VOLUME" meta="CAMPAIGN WINDOWS OVERLAID"/><div className="chart-panel tall"><BaselineChart/></div><div className="analysis-grid"><div><SectionTitle n="02" title="ACTIVE CARDS" meta="UNIQUE / 7D ROLLING"/><div className="chart-panel"><LineChart/></div></div><div><SectionTitle n="03" title="TICKET DISTRIBUTION" meta="LOG SCALE"/><div className="chart-panel"><Histogram/></div></div></div></>; }
-
-function TierView() {
-  const {data,error}=useTierSummary();
-  const provenance: Provenance=data?.provenance ?? 'demo';
-  const formatFlow=(value:number|undefined)=>value===undefined?'—':`${value>=0?'+':''}${value.toLocaleString()}`;
-  return <><PageHeading eyebrow="ETHER.FI CASH / TIER STATE" title="WHO QUALIFIED, WHEN, AND BY WHICH ROUTE." meta={<>AUTHORITATIVE INTERVAL RECONSTRUCTION<br/><span>{data?.asOfBlock?`AS OF BLOCK ${data.asOfBlock.toLocaleString()}`:error?'TIER API OFFLINE':'LOADING TIER PERIODS'}</span></>}/><div className="tier-table"><div className="tier-row tier-head"><span>TIER</span><span>POPULATION</span><span>30D FLOW</span><span>QUALIFY BY ANY ROUTE</span><span>CASHBACK</span><span>MONTHLY CAP</span></div>{tierLadder.map((tier)=><div className="tier-row" key={tier.id}><strong>{tier.id.toUpperCase()}</strong><span className="num">{data?data.population[tier.id].toLocaleString():'—'}</span><span className={`num ${(data?.flow30d[tier.id]??0)>=0?'positive':''}`}>{formatFlow(data?.flow30d[tier.id])}</span><span>{tier.qualifyBy.join(' / ')}</span><span className="num">{tier.cashbackRatePct}%</span><span className="num">${tier.monthlyCapUsd.toLocaleString()}</span></div>)}</div><SectionTitle n="01" title="POPULATION OVER TIME" meta="12 WEEK / FINALIZED"/><div className="chart-panel tall">{data?<TierHistoryChart summary={data}/>:<div className="tape-empty">{error?'TIER DATA UNAVAILABLE':'LOADING RECONSTRUCTED PERIODS…'}</div>}</div><div className="analysis-grid"><div><SectionTitle n="02" title="NET TIER FLOW" meta="30D / ASSIGNMENT EVENTS"/><div className="metric-list">{tierLadder.map((tier)=><MetricRow key={tier.id} label={tier.id.toUpperCase()} value={formatFlow(data?.flow30d[tier.id])} type={provenance}/>)}</div></div><div><SectionTitle n="03" title="RECONSTRUCTION BASIS" meta="CONTRACT STATE RECONCILED"/><div className="metric-list"><MetricRow label="SAFE DEPLOYMENT DEFAULT" value="CORE" type={provenance}/><MetricRow label="TIER CHANGES" value="SafeTiersSet" type={provenance}/><MetricRow label="QUALIFICATION ROUTE" value="NOT EMITTED" type="inferred"/></div></div></div><div className="method-note"><Provenance type={provenance}/>Intervals are rebuilt from finalized EtherFiSafeFactory deployments and CashEventEmitter tier assignments. The contract exposes the assigned tier, but not whether points, staking, Liquid deposits or payment caused it.</div></>;
-}
-
-function MethodologyView() { return <><PageHeading eyebrow="CARDTAPE / METHODOLOGY" title="WHAT WE KNOW. WHAT WE INFER. WHAT WE CANNOT SEE." meta={<>METHOD VERSION 0.2.0<br/><span>REGISTRY-GENERATED 2026-09-17</span></>}/><div className="method-grid"><MethodBlock n="01" title="SETTLEMENT, NOT AUTHORIZATION"><p>On-chain card data shows timestamp, chain, token, amount, cardholder smart account and program treasury. It does not show merchant, MCC, country, decline reason, approval rate or FX spread.</p><p>We never create merchant-level labels or imply that declined authorizations exist in the dataset.</p></MethodBlock><MethodBlock n="02" title="DIFFERENCE-IN-DIFFERENCES"><p>Lift = (eligible during − eligible before) − (control during − control before).</p><p>Assumption: eligible and control tiers would have moved in parallel without the campaign. Eight weeks of pre-trends appear above every estimate. Divergent trends void the estimate.</p></MethodBlock><MethodBlock n="03" title="TIER INTERVALS"><p>Every Safe begins in Core at its finalized factory deployment. Each finalized SafeTiersSet assignment closes the prior interval and opens the next.</p><p>The assigned tier is measured; its off-chain qualification route is not emitted and remains unknown.</p></MethodBlock><MethodBlock n="04" title="PERSISTENCE / SURVIVAL"><p>Campaign-acquired or reactivated accounts are tracked at weeks 4, 8 and 12, compared with accounts acquired outside a campaign window.</p><p>Separately, we track whether accounts that staked before a campaign unstaked within 30 days after it ended.</p></MethodBlock></div><SectionTitle n="05" title="CAMPAIGN REGISTRY" meta="RENDERED VERBATIM FROM VERSIONED SOURCE"/><div className="registry-list">{campaignRegistry.map((campaign)=><article className="registry-row" key={campaign.id}><div><strong>{campaign.name.toUpperCase()}</strong><span>{campaign.startsAt.toISOString()} → {campaign.endsAt.toISOString()}</span></div><p>{campaign.signature.note}</p><p>{campaign.methodNote}</p><a href={campaign.sourceUrl} target="_blank" rel="noreferrer">PUBLIC SOURCE ↗</a></article>)}</div><SectionTitle n="06" title="PROVENANCE" meta="REQUIRED ON EVERY PUBLISHED NUMBER"/><div className="provenance-grid"><ProvenanceCard type="measured" text="Directly observed on-chain or in a public campaign document."/><ProvenanceCard type="inferred" text="A reproducible proxy for behavior that is not directly visible."/><ProvenanceCard type="estimated" text="Output from a statistical model with assumptions and uncertainty."/><ProvenanceCard type="demo" text="Synthetic fixture data. Never a claim about real-world activity."/></div><div className="privacy-note">PRIVACY RULE · CARD ACCOUNTS ARE PSEUDONYMOUS BUT PERSISTENT. CARDTAPE NEVER BUILDS INDIVIDUAL PROFILES OR RANKS CARDHOLDERS.</div></>; }
-
-function ContextRail({campaign,onOpen,onClose}:{campaign:(typeof campaigns)[number];onOpen:()=>void;onClose:()=>void}) { return <aside className="right-rail"><button className="rail-close" onClick={onClose} aria-label="Close context panel">×</button><div className="context-kicker">SELECTED CAMPAIGN</div><h2>{campaign.name}</h2><div className="badges"><span>{campaign.status}</span><Provenance type="inferred"/></div><dl><div><dt>WINDOW</dt><dd>{campaign.window}, 2026</dd></div><div><dt>QUALIFYING TICKET</dt><dd>{campaign.id==='iphone'?'≥ $1,000.00':'≥ $88.00'}</dd></div><div><dt>STATED BUDGET</dt><dd>{campaign.budget}</dd></div><div><dt>ELIGIBLE TIERS</dt><dd>{campaign.tiers}</dd></div></dl><div className="context-note"><span>ATTRIBUTION NOTE</span>{campaign.id==='iphone'?'Apple is not identifiable on-chain. Qualifying purchases are proxied by ticket size, tier and window.':'Campaign participation is proxied from qualifying settlement and referral timing.'}</div><button className="open-readout" onClick={onOpen}>OPEN FULL READOUT <span>↗</span></button></aside>; }
-
-function PageHeading({eyebrow,title,meta}:{eyebrow:string;title:string;meta:ReactNode}) { return <div className="section-heading"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1></div><div className="asof">{meta}</div></div>; }
-function Denomination({value,setValue}:{value:string;setValue:(value:string)=>void}) { return <div className="segmented" aria-label="Settlement denomination">{['USD','EUR','GBP'].map((item)=><button key={item} className={value===item?'active':''} onClick={()=>setValue(item)}>{item}</button>)}</div>; }
-function Stat({label,value,note,provenance,live=false}:{label:string;value:string;note:string;provenance:Provenance;live?:boolean}) { return <div className="stat"><span>{label}</span><strong className={value==='—'?'muted':''}>{value}</strong><small className={live?'accent':''}>{live&&<span className="live-dot"/>}{note}</small><Provenance type={provenance}/></div>; }
-function Provenance({type}:{type:Provenance}) { return <span className={`provenance ${type}`}>{type.toUpperCase()}</span>; }
-function SectionTitle({n,title,meta}:{n:string;title:string;meta:string}) { return <div className="section-title"><span>{n}</span><b>{title}</b><em>{meta}</em></div>; }
-function Panel({title,meta,children}:{title:string;meta:string;children:ReactNode}) { return <div className="mini-panel"><div className="panel-head"><span>{title}</span><span>{meta}</span></div>{children}</div>; }
-function MetricRow({label,value,type}:{label:string;value:string;type:Provenance}) { return <div className="metric-row"><span>{label}</span><b>{value}</b><Provenance type={type}/></div>; }
-function MethodBlock({n,title,children}:{n:string;title:string;children:ReactNode}) { return <article className="method-block"><span>{n}</span><h2>{title}</h2>{children}</article>; }
-function ProvenanceCard({type,text}:{type:Provenance;text:string}) { return <div className="provenance-card"><Provenance type={type}/><p>{text}</p></div>; }
-function Footer({tape}:{tape:TapeFeed}) {
-  const latestBlock = tape.rows[0]?.blockNumber;
-  return <footer><span>WS {tape.connection.toUpperCase()}</span><span>LAST BLOCK {latestBlock?.toLocaleString() ?? '—'}</span><span>● MEASURED&nbsp;&nbsp; ◐ INFERRED&nbsp;&nbsp; ○ ESTIMATED&nbsp;&nbsp; ◇ DEMO</span><span>NEVER ASKS FOR YOUR KEYS</span></footer>;
-}
-
-function formatTapeAmount(event:TapeEvent):string {
-  if (event.amountUsd===null) return 'UNPRICED';
-  return `+$${Number(event.amountUsd).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-}
-
-function shortAddress(value:string):string { return `${value.slice(0,6)}…${value.slice(-4)}`; }
-
-function tapeLabel(event:TapeEvent):string {
-  if (event.signatureCampaignIds.length>0) return 'SIGNATURE';
-  return event.eventType.toUpperCase();
-}
-
-function TapeExcerpt({rows,limit}:{rows:readonly TapeEvent[];limit:number}) {
-  if (rows.length===0) return <div className="tape-empty">WAITING FOR POSTGRES SNAPSHOT…</div>;
-  return <>{rows.slice(0,limit).map((event)=><div className={`tape-row ${event.campaignWindowIds.length>0?'campaign-window':''}`} key={event.id}><span>{event.blockTime.slice(11,19)}</span><span>{formatTapeAmount(event)}</span><span>{event.tokenSymbol}</span><span>{shortAddress(event.cardAccount)}</span><span className={event.signatureCampaignIds.length>0?'signature':''}>{tapeLabel(event)}</span></div>)}</>;
-}
-
-const TapeEventRow = memo(function TapeEventRow({event,isNewest}:{event:TapeEvent;isNewest:boolean}) {
-  const classes = ['tape-full-row'];
-  if (isNewest) classes.push('new-row');
-  if (event.campaignWindowIds.length>0) classes.push('campaign-window');
-  if (event.signatureCampaignIds.length>0) classes.push('signature-match');
-  return <div className={classes.join(' ')} title={event.campaignWindowIds.length>0?`Campaign window: ${event.campaignWindowIds.join(', ')}`:undefined}>
-    <span>{event.blockTime.slice(11,19)}</span><span className="positive">●</span><span>ETHER.FI</span><strong>{formatTapeAmount(event)}</strong><span>{event.tokenSymbol}</span><span>OP</span><span>{shortAddress(event.cardAccount)}</span><span className={event.signatureCampaignIds.length>0?'signature':''}>{tapeLabel(event)}</span><a href={`https://optimistic.etherscan.io/tx/${event.txHash}`} target="_blank" rel="noreferrer" aria-label="Open transaction">↗</a>
+  return <div className="app-shell">
+    <Header view={view} setView={setView} />
+    <main className="content-shell">
+      {view.page === 'overview' && <Overview onOpenNeobank={openNeobank} />}
+      {view.page === 'neobank' && <NeobankPage neobankId={view.neobankId} onBack={() => setView({ page: 'overview' })} onOpenCampaign={openCampaign} />}
+      {view.page === 'campaign' && <CampaignPage campaignId={view.campaignId} tape={tape} onBack={() => setView({ page: 'neobank', neobankId: view.neobankId })} />}
+      {view.page === 'methodology' && <Methodology tape={tape} />}
+    </main>
+    <Footer view={view} tape={tape} />
   </div>;
-});
-
-function TapeTable({rows}:{rows:readonly TapeEvent[]}) {
-  return <div className="tape-table"><div className="tape-full-row tape-head"><span>TIME / UTC</span><span>DIR</span><span>PROGRAM</span><span>AMOUNT</span><span>TOKEN</span><span>CHAIN</span><span>CARD</span><span>TYPE</span><span>TX</span></div>{rows.length===0?<div className="tape-empty">NO MATCHING SETTLEMENTS</div>:rows.map((event,index)=><TapeEventRow event={event} isNewest={index===0} key={event.id}/>)}</div>;
 }
 
-function LineChart(){return <svg className="terminal-chart" viewBox="0 0 600 150" role="img" aria-label="Settlement volume rising over seven days"><path className="gridline" d="M0 28H600M0 72H600M0 116H600"/><path className="area" d="M0 115L45 109L92 102L137 107L184 86L230 92L276 75L322 81L368 51L414 59L460 38L506 43L552 19L600 30V150H0Z"/><path className="line" d="M0 115L45 109L92 102L137 107L184 86L230 92L276 75L322 81L368 51L414 59L460 38L506 43L552 19L600 30"/><text x="592" y="24" textAnchor="end">$1.84M</text></svg>}
-function TrendChart(){return <svg className="terminal-chart" viewBox="0 0 800 220" role="img" aria-label="Eligible and control cohort pre-trends"><path className="gridline" d="M40 35H780M40 95H780M40 155H780M40 205H780"/><rect className="window-band" x="665" y="18" width="115" height="187"/><path className="control-line-svg" d="M40 170L118 155L196 160L274 140L352 146L430 128L508 119L586 105L665 96L722 91L780 88"/><path className="eligible-line" d="M40 166L118 151L196 157L274 135L352 141L430 124L508 114L586 101L665 94L722 52L780 34"/><text x="770" y="28" textAnchor="end">ELIGIBLE</text><text x="770" y="105" textAnchor="end">CONTROL</text><text x="672" y="198">WINDOW</text></svg>}
-function Histogram(){const bars=[10,20,33,45,62,70,55,39,28,20,14,9,7,5,18,24,12];return <svg className="terminal-chart" viewBox="0 0 600 190" role="img" aria-label="Ticket distribution histogram with one thousand dollar threshold"><path className="gridline" d="M25 30H585M25 90H585M25 150H585"/>{bars.map((height,index)=><rect key={index} className={index>=14?'hist-accent':'hist-bar'} x={32+index*31} y={160-height*1.7} width="20" height={height*1.7}/>)}<path className="threshold" d="M459 20V166"/><text x="465" y="32">$1,000 THRESHOLD</text><text x="25" y="181">$0</text><text x="540" y="181">$2,000+</text></svg>}
-function FlowChart(){return <svg className="terminal-chart" viewBox="0 0 600 190" role="img" aria-label="Tier upgrade flow"><path className="gridline" d="M20 45H580M20 95H580M20 145H580"/><path className="flow-line" d="M20 154L70 150L120 146L170 151L220 137L270 127L320 113L370 103L420 80L470 61L520 49L580 28"/><path className="threshold" d="M420 20V166"/><text x="427" y="178">WINDOW START</text><text x="570" y="23" textAnchor="end">+130 UPGRADES</text></svg>}
-function EventChart(){return <svg className="terminal-chart" viewBox="0 0 600 190" role="img" aria-label="Cumulative abnormal ETHFI return"><path className="gridline" d="M20 35H580M20 95H580M20 155H580"/><path className="zero-line" d="M20 95H580"/><path className="event-line" d="M20 102L80 98L140 105L200 101L260 93L300 95L340 72L400 59L460 64L520 48L580 53"/><path className="threshold" d="M300 20V165"/><text x="306" y="178">DAY 0</text><text x="570" y="47" textAnchor="end">+4.8%</text></svg>}
-function PersistenceChart(){return <svg className="terminal-chart" viewBox="0 0 800 220" role="img" aria-label="Campaign cohort persistence compared with baseline"><path className="gridline" d="M40 30H780M40 85H780M40 140H780M40 195H780"/><path className="eligible-line" d="M40 27L220 62L400 92L580 117L760 133"/><path className="control-line-svg" d="M40 27L220 76L400 118L580 151L760 169"/><circle className="plot-point" cx="220" cy="62" r="3"/><circle className="plot-point" cx="400" cy="92" r="3"/><circle className="plot-point" cx="580" cy="117" r="3"/><text x="760" y="127" textAnchor="end">CAMPAIGN 41.2%</text><text x="760" y="185" textAnchor="end">BASELINE 23.8%</text><text x="40" y="214">W0</text><text x="212" y="214">W4</text><text x="392" y="214">W8</text><text x="570" y="214">W12</text></svg>}
-function BaselineChart(){return <svg className="terminal-chart" viewBox="0 0 800 220" role="img" aria-label="Eighteen month baseline settlement volume"><path className="gridline" d="M30 30H780M30 85H780M30 140H780M30 195H780"/><rect className="window-band" x="230" y="20" width="55" height="175"/><rect className="window-band" x="620" y="20" width="70" height="175"/><path className="eligible-line" d="M30 180L70 176L110 170L150 173L190 162L230 149L270 118L310 142L350 135L390 128L430 132L470 116L510 107L550 111L590 96L630 82L670 40L710 71L750 59L780 54"/><text x="238" y="34">LNY</text><text x="628" y="34">IPHONE</text></svg>}
-function TierHistoryChart({summary}:{summary:TierSummary}) {
-  const tierIds=['core','luxe','pinnacle','vip'] as const;
-  const max=Math.max(1,...summary.history.flatMap((point)=>tierIds.map((tier)=>point.population[tier])));
-  const path=(tier:(typeof tierIds)[number])=>summary.history.map((point,index)=>{
-    const x=35+(index/Math.max(1,summary.history.length-1))*710;
-    const y=195-(point.population[tier]/max)*160;
-    return `${index===0?'M':'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
-  }).join('');
-  const final=summary.history.at(-1)?.population ?? summary.population;
-  return <svg className="terminal-chart" viewBox="0 0 800 220" role="img" aria-label="Reconstructed tier population over twelve weeks"><path className="gridline" d="M30 35H770M30 88H770M30 141H770M30 195H770"/>{tierIds.map((tier)=><path key={tier} className={`tier-${tier}`} d={path(tier)}/>)}<text x="760" y="24" textAnchor="end">CORE {final.core.toLocaleString()} · LUXE {final.luxe.toLocaleString()} · PINNACLE {final.pinnacle.toLocaleString()} · VIP {final.vip.toLocaleString()}</text><text x="35" y="214">{summary.history[0]?.at.slice(0,10)}</text><text x="745" y="214" textAnchor="end">{summary.history.at(-1)?.at.slice(0,10)}</text></svg>;
+function Header({ view, setView }: { view: View; setView: (view: View) => void }) {
+  return <header className="site-header">
+    <button className="brand" onClick={() => setView({ page: 'overview' })} aria-label="CARDTAPE overview">CARDTAPE</button>
+    <nav className="primary-nav" aria-label="Primary navigation">
+      <button className={view.page === 'overview' ? 'active' : ''} onClick={() => setView({ page: 'overview' })}>Overview</button>
+      <button className={view.page === 'methodology' ? 'active' : ''} onClick={() => setView({ page: 'methodology' })}>Data methodology</button>
+    </nav>
+    <div className="header-note"><span>Campaign impact</span><b>Observed, not overstated</b></div>
+  </header>;
 }
+
+function Overview({ onOpenNeobank }: { onOpenNeobank: (id: string) => void }) {
+  return <div className="page overview-page">
+    <section className="overview-hero">
+      <div className="hero-copy"><h1>See what changed<br />when a campaign ran.</h1><p>CARDTAPE compares observable activity with a clear baseline, so teams can understand impact in under 30 seconds.</p></div>
+      <div className="hero-sequence" aria-label="Product hierarchy"><span>01</span><b>Neobank</b><ArrowRight size={16} /><span>02</span><b>Campaign</b><ArrowRight size={16} /><span>03</span><b>KPI impact</b></div>
+    </section>
+    <section className="neobank-section">
+      <SectionIntro kicker="AVAILABLE NEOBANKS" title="Choose a program" copy="Each program keeps its own data sources behind one consistent campaign view." />
+      <div className="neobank-grid">{neobanks.map((neobank) => {
+        const campaigns = getCampaignsForNeobank(neobank.id);
+        const demo = campaigns.every((campaign) => campaign.status === 'demonstration');
+        return <button className="neobank-card" key={neobank.id} onClick={() => onOpenNeobank(neobank.id)}>
+          <div className="neobank-card-top"><NeobankLogo neobankId={neobank.id} /><span className={`availability ${demo ? 'demo' : ''}`}>{demo ? 'Demo adapter' : 'Available'}</span></div>
+          <div><h2>{neobank.name}</h2><p>{neobank.description}</p></div>
+          <div className="neobank-card-footer"><span>{campaigns.length} {campaigns.length === 1 ? 'campaign' : 'campaigns'}</span><span>View campaigns <ArrowRight size={15} /></span></div>
+        </button>;
+      })}</div>
+    </section>
+  </div>;
+}
+
+function NeobankPage({ neobankId, onBack, onOpenCampaign }: { neobankId: string; onBack: () => void; onOpenCampaign: (campaign: NeobankCampaign) => void }) {
+  const neobank = getNeobank(neobankId);
+  const campaigns = getCampaignsForNeobank(neobankId);
+  return <div className="page neobank-page">
+    <BackButton onClick={onBack}>All neobanks</BackButton>
+    <section className="neobank-hero"><div><Eyebrow><Landmark size={14} /> {neobank.shortName} / Campaigns</Eyebrow><h1>{neobank.name}</h1><p>{neobank.description}</p></div><div className="program-summary"><span>PROGRAM VIEW</span><strong>{String(campaigns.length).padStart(2, '0')}</strong><small>{campaigns.length === 1 ? 'onchain view' : 'onchain views'}</small></div></section>
+    {campaigns.some((campaign) => campaign.status === 'demonstration') && <div className="disclosure"><CircleAlert size={16} /><span><b>Demonstration environment.</b> Plasma values below are illustrative normalized outputs, not live claims.</span></div>}
+    <section className="campaign-list-section">
+      <div className="list-heading"><span>CAMPAIGN</span><span>OBSERVATION WINDOW</span><span>READOUT</span><span /></div>
+      <div className="campaign-list">{campaigns.map((campaign) => <button key={campaign.id} className="campaign-row" onClick={() => onOpenCampaign(campaign)}>
+        <div className="campaign-name"><StatusDot status={campaign.status} /><div><strong>{campaign.name}</strong><small>{campaign.description}</small></div></div>
+        <div className="campaign-period">{campaign.id === 'plasma-one-platinum-locks' ? <span>Rolling 7 days</span> : campaign.id === 'etherfi-cash-live' ? <span>Rolling 24 hours</span> : <><span>{formatDate(campaign.startsAt)}</span><span className="period-line" /><span>{formatDate(campaign.endsAt)}</span></>}</div>
+        <div><StatusLabel status={campaign.status} /></div><ArrowRight size={18} />
+      </button>)}</div>
+    </section>
+    <div className="neobank-note"><ShieldCheck size={18} /><p><b>One interface, program-specific evidence.</b> Each published snapshot contains normalized onchain readouts, observation windows, and source metadata.</p></div>
+  </div>;
+}
+
+function CampaignPage({ campaignId, tape, onBack }: { campaignId: string; tape: TapeFeed; onBack: () => void }) {
+  const campaign = getNeobankCampaign(campaignId);
+  const neobank = getNeobank(campaign.neobankId);
+  const plasmaMonitor = campaign.neobankId === 'plasma-one';
+  const cashMonitor = campaign.id === 'etherfi-cash-live';
+  const rollingMonitor = plasmaMonitor || cashMonitor;
+  const [baselineDays, setBaselineDays] = useState(plasmaMonitor ? 7 : 14);
+  const [initialAsOf] = useState(() => Date.now());
+  const impact = snapshotImpact(tape.snapshot, campaign.id, cashMonitor ? 1 : baselineDays);
+  const error = tape.connection === 'disconnected' || (tape.snapshot !== null && impact === null);
+  const asOf = tape.snapshot ? Date.parse(tape.snapshot.generatedAt) : initialAsOf;
+  const periods = impact ? { campaign: impact.campaignPeriod, baseline: impact.baselinePeriod } : (() => {
+    const campaignStart = rollingMonitor ? new Date(asOf - (cashMonitor ? DAY : 7 * DAY)) : new Date(campaign.startsAt);
+    const campaignEnd = rollingMonitor ? new Date(asOf).toISOString() : campaign.endsAt;
+    return { campaign: { start: campaignStart.toISOString(), end: campaignEnd }, baseline: { start: new Date(campaignStart.getTime() - (cashMonitor ? 1 : baselineDays) * DAY).toISOString(), end: new Date(campaignStart.getTime() - 1).toISOString() } };
+  })();
+
+  return <div className="page campaign-page">
+    <BackButton onClick={onBack}>{neobank.name} campaigns</BackButton>
+    <header className="campaign-hero">
+      <div className="campaign-title-block"><Eyebrow><span className="eyebrow-dot" /> {neobank.name} / {rollingMonitor ? 'Onchain snapshot' : 'Impact readout'}</Eyebrow><h1>{campaign.name}</h1><p>{campaign.description}</p>{campaign.sourceUrl && <a href={campaign.sourceUrl} target="_blank" rel="noreferrer">Official program details ↗</a>}{plasmaMonitor && <> · <a href="https://plasmascan.to/address/0xe035a6a5aba726bd162e273a22ff85ae5f6e04c3#events" target="_blank" rel="noreferrer">Onchain vault ↗</a></>}</div>
+      <div className="period-control"><label htmlFor="baseline">COMPARE WITH</label>{cashMonitor ? <strong>Previous 24 hours</strong> : <div className="select-wrap"><select id="baseline" value={baselineDays} onChange={(event) => setBaselineDays(Number(event.target.value))}><option value={7}>Previous 7 days</option><option value={14}>Previous 14 days</option><option value={30}>Previous 30 days</option></select><ChevronDown size={15} /></div>}<small>{formatDate(periods.baseline.start)} — {formatDate(periods.baseline.end)}</small></div>
+    </header>
+    {tape.snapshot && <div className="disclosure"><CircleAlert size={16} /><span>Published onchain snapshot from {formatDateTime(tape.snapshot.generatedAt)}. Rolling windows stay fixed until the next publication.</span></div>}
+    {campaign.status === 'demonstration' && <div className="disclosure"><CircleAlert size={16} /><span><b>Demo analysis.</b> This is not an official campaign or live-data claim. Values demonstrate the adapter contract.</span></div>}
+    {error && <div className="error-state">No published onchain readout is available for this campaign.</div>}
+    {!impact && !error && <CampaignLoading />}
+    {impact && <>
+      <VerdictPanel impact={impact} />
+      <section className="metrics-section"><div className="section-heading"><div><span>CORE KPIs</span><h2>Campaign period versus baseline</h2></div><p>Only the most decision-useful signals are shown.</p></div><div className="metric-grid">{impact.metrics.map((metric) => <MetricCard metric={metric} key={metric.id} />)}</div></section>
+      {impact.trend.length > 0 && <section className="trend-section"><div className="section-heading"><div><span>DAILY TREND</span><h2>Observable activity over time</h2></div><div className="chart-legend"><i className="legend-line" />{plasmaMonitor ? 'Platinum-sized locks' : 'Daily settlement USD'} <i className="legend-window" />Observation window</div></div><TrendChart impact={impact} /></section>}
+      <section className="evidence-section"><details><summary><span><Database size={17} />Evidence & limitations</span><span>Observation periods, source notes and confidence <ChevronDown size={16} /></span></summary><div className="evidence-content"><div><h3>What this readout can say</h3><p>It compares observable activity in two time windows. A change can be consistent with campaign impact, but it is not automatically causal.</p></div><div><h3>Important limitations</h3><ul>{impact.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul></div><div><h3>Periods</h3><p>Campaign: {formatDate(impact.campaignPeriod.start)} — {formatDate(impact.campaignPeriod.end)}<br />Baseline: {formatDate(impact.baselinePeriod.start)} — {formatDate(impact.baselinePeriod.end)}</p></div></div></details></section>
+    </>}
+  </div>;
+}
+
+function VerdictPanel({ impact }: { impact: CampaignImpact }) {
+  const labels: Record<ImpactVerdict, string> = { positive: 'Observed increase', neutral: 'Broadly unchanged', negative: 'Observed decrease', insufficient: 'Insufficient measured history' };
+  const icons: Record<ImpactVerdict, ReactNode> = { positive: <TrendingUp size={25} />, neutral: <Minus size={25} />, negative: <TrendingDown size={25} />, insufficient: <CircleAlert size={25} /> };
+  return <section className={`verdict-panel ${impact.verdict}`}><div className="verdict-icon">{icons[impact.verdict]}</div><div><span>OBSERVATION</span><h2>{labels[impact.verdict]}</h2><p>{impact.conclusion}</p></div><div className="verdict-period"><span>OBSERVATION WINDOW</span><strong>{formatDate(impact.campaignPeriod.start)} — {formatDate(impact.campaignPeriod.end)}</strong></div></section>;
+}
+
+function MetricCard({ metric }: { metric: CampaignMetric }) {
+  const positive = metric.changeValue !== null && metric.changeValue > 0;
+  const negative = metric.changeValue !== null && metric.changeValue < 0;
+  return <article className="metric-card">
+    <div className="metric-top"><span>{metric.label}</span><EvidencePill kind={metric.evidence.kind} /></div>
+    <div className="metric-values"><div><small>CAMPAIGN</small><strong>{formatMetric(metric.campaignValue, metric.format)}</strong></div><div><small>BASELINE</small><strong>{formatMetric(metric.baselineValue, metric.format)}</strong></div></div>
+    <div className={`metric-change ${positive ? 'up' : negative ? 'down' : ''}`}>{positive ? <TrendingUp size={15} /> : negative ? <TrendingDown size={15} /> : <Minus size={15} />}<strong>{formatChange(metric)}</strong><span>vs baseline</span></div>
+    <p>{metric.interpretation}</p>
+    <details className="metric-evidence"><summary>View evidence <ChevronDown size={13} /></summary><div><b>{metric.evidence.confidence} confidence</b> · updated {formatDateTime(metric.evidence.lastUpdatedAt)}<br />{metric.evidence.note}</div></details>
+  </article>;
+}
+
+function TrendChart({ impact }: { impact: CampaignImpact }) {
+  const values = impact.trend.map((point) => point.value);
+  const min = Math.min(...values) - 5; const max = Math.max(...values) + 5;
+  const x = (index: number) => 52 + (index / Math.max(1, impact.trend.length - 1)) * 836;
+  const y = (value: number) => 230 - ((value - min) / Math.max(1, max - min)) * 174;
+  const path = impact.trend.map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(1)} ${y(point.value).toFixed(1)}`).join(' ');
+  const campaignIndices = impact.trend.map((point, index) => point.phase === 'campaign' ? index : -1).filter((index) => index >= 0);
+  const startIndex = campaignIndices[0] ?? 0; const endIndex = campaignIndices.at(-1) ?? startIndex;
+  const startX = x(startIndex); const endX = x(Math.min(impact.trend.length - 1, endIndex + 1));
+  return <div className="trend-chart-wrap"><svg className="trend-chart" viewBox="0 0 940 285" role="img" aria-label="Daily activity trend with campaign start and end markers">
+    <defs><linearGradient id="chart-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#caff5b" stopOpacity=".22" /><stop offset="1" stopColor="#caff5b" stopOpacity="0" /></linearGradient></defs>
+    <path className="chart-grid" d="M52 56H888M52 114H888M52 172H888M52 230H888" /><rect className="campaign-band" x={startX} y="38" width={Math.max(2, endX - startX)} height="192" /><path className="area-path" d={`${path} L888 230 L52 230 Z`} /><path className="trend-path" d={path} /><path className="marker-line" d={`M${startX} 38V244M${endX} 38V244`} />
+    <text x={startX + 7} y="28">START</text><text x={endX - 7} y="28" textAnchor="end">END</text>{impact.trend.map((point, index) => <circle key={point.date} className={point.phase === 'campaign' ? 'trend-point active' : 'trend-point'} cx={x(index)} cy={y(point.value)} r={point.phase === 'campaign' ? 3.3 : 2.4} />)}
+    <text x="52" y="266">{formatDate(impact.trend[0]?.date ?? impact.baselinePeriod.start)}</text><text x="888" y="266" textAnchor="end">{formatDate(impact.trend.at(-1)?.date ?? impact.campaignPeriod.end)}</text><text x="44" y="60" textAnchor="end">{Math.round(max)}</text><text x="44" y="234" textAnchor="end">{Math.round(min)}</text>
+  </svg><p>{impact.neobankId === 'plasma-one' ? 'Daily Platinum-sized vault locks · Locks do not confirm card signups or activations.' : 'Daily finalized settlement USD · Campaign boundaries shown for orientation · Changes indicate correlation, not automatic causation.'}</p></div>;
+}
+
+function Methodology({ tape }: { tape: TapeFeed }) {
+  return <div className="page methodology-page">
+    <section className="method-hero"><Eyebrow><ShieldCheck size={14} /> Data methodology</Eyebrow><h1>Technical detail,<br />kept in its place.</h1><p>The main journey stays focused on neobanks and campaign impact. Source, network and indexing context lives here for review.</p></section>
+    <section className="method-principles"><article><span>01</span><h2>Observed before attributed</h2><p>We describe changes as observed impact or correlation. Causal language requires a defensible design and control.</p></article><article><span>02</span><h2>Provenance on every metric</h2><p>Each normalized metric carries source IDs, observation period, last-updated time and confidence.</p></article><article><span>03</span><h2>Unknown stays unknown</h2><p>No merchant label or confirmed card purchase is inferred from a token transfer or balance debit alone.</p></article></section>
+    <section className="source-section"><div className="section-heading"><div><span>DATA SOURCES</span><h2>Adapters and observable signals</h2></div><p>Implementation details are intentionally absent from campaign navigation.</p></div><div className="source-list">{dataSources.map((source) => <article key={source.id} className="source-row"><div className="source-title"><Database size={17} /><div><strong>{source.name}</strong><EvidencePill kind={source.kind} /></div></div><p>{source.description}</p><div><span>NETWORK</span><strong>{source.networks.join(', ') || 'Off-chain registry'}</strong></div><div><span>SIGNALS</span><strong>{source.signals.join(' · ')}</strong></div><details><summary>Method <ChevronDown size={13} /></summary><p>{source.methodology}</p></details></article>)}</div></section>
+    <section className="adapter-status"><div><span className={`status-light ${tape.connection}`} /><div><strong>Published onchain snapshot</strong><small>{tape.snapshot ? `Generated ${formatDateTime(tape.snapshot.generatedAt)} · Optimism block ${tape.snapshot.optimism.blockNumber}` : 'No snapshot published yet'}</small></div></div><p>{tape.snapshot?.optimism.tiersIndexedAt ? `Tier assignments last reconstructed ${formatDateTime(tape.snapshot.optimism.tiersIndexedAt)}; newer tape events have an unknown tier. ` : 'Tier assignments have not been reconstructed. '}The local indexer and database are used only when publishing an update.</p></section>
+  </div>;
+}
+
+function CampaignLoading() { return <div className="campaign-loading"><div /><div /><div /><div /></div>; }
+
+function Footer({ view, tape }: { view: View; tape: TapeFeed }) {
+  const context = view.page === 'campaign' || view.page === 'neobank' ? getNeobank(view.neobankId).name : 'Multi-neobank view';
+  return <footer className="site-footer"><span>© 2026 CARDTAPE</span><span>{context}</span><span className="footer-source"><i className={tape.connection} />{tape.snapshot ? `Snapshot ${formatDateTime(tape.snapshot.generatedAt)}` : 'Snapshot unavailable'}</span><span>Evidence-aware campaign analytics</span></footer>;
+}
+
+function BackButton({ onClick, children }: { onClick: () => void; children: ReactNode }) { return <button className="back-button" onClick={onClick}><ArrowLeft size={15} />{children}</button>; }
+function Eyebrow({ children }: { children: ReactNode }) { return <div className="eyebrow">{children}</div>; }
+function SectionIntro({ kicker, title, copy }: { kicker: string; title: string; copy: string }) { return <div className="section-intro"><div><span>{kicker}</span><h2>{title}</h2></div><p>{copy}</p></div>; }
+function NeobankLogo({ neobankId }: { neobankId: string }) {
+  const etherfi = neobankId === 'etherfi-cash';
+  return <img className={`neobank-logo ${etherfi ? 'etherfi' : 'plasma'}`} src={etherfi ? '/etherfi-symbol.svg' : 'https://www.plasma.org/brand/logo/plasma-symbol-dark.svg'} alt={etherfi ? 'ether.fi' : 'Plasma'} />;
+}
+function StatusDot({ status }: { status: NeobankCampaign['status'] }) { return <span className={`status-dot ${status}`}>{status === 'unavailable' ? <CircleAlert size={11} /> : <Check size={11} />}</span>; }
+function StatusLabel({ status }: { status: NeobankCampaign['status'] }) { const label = status === 'complete' ? 'Onchain window' : status === 'active' ? 'Snapshot monitor' : status === 'unavailable' ? 'History unavailable' : 'Demo readout'; return <span className={`status-label ${status}`}>{label}</span>; }
+function EvidencePill({ kind }: { kind: EvidenceKind }) { const labels: Record<EvidenceKind, string> = { live: 'Live', cached: 'Snapshot', inferred: 'Inferred', estimated: 'Estimated', demo: 'Demo data' }; return <span className={`evidence-pill ${kind}`}>{labels[kind]}</span>; }
+function formatDate(value: string): string { return new Intl.DateTimeFormat('en-US', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(value)); }
+function formatDateTime(value: string): string { return new Intl.DateTimeFormat('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }).format(new Date(value)); }
+function formatMetric(value: number | null, format: CampaignMetric['format']): string { if (value === null) return '—'; if (format === 'currency') { if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}m`; if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}k`; return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`; } if (format === 'percent') return `${value.toFixed(1)}%`; return value.toLocaleString('en-US', { maximumFractionDigits: format === 'count' ? 0 : 1 }); }
+function formatChange(metric: CampaignMetric): string { if (metric.changeValue === null) return 'Not available'; const sign = metric.changeValue > 0 ? '+' : ''; return metric.changeUnit === 'percentage-points' ? `${sign}${metric.changeValue.toFixed(1)}pp` : `${sign}${metric.changeValue.toFixed(1)}%`; }

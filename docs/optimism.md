@@ -51,6 +51,14 @@ npm run indexer:once -- --replay-blocks 25
 
 The replay mode deliberately skips finalization updates, so a successful gate reports zero inserted and zero finalized rows.
 
+Historical campaign windows use the separate finalized backfill path so the live cursor never rewinds:
+
+```bash
+npm run backfill:optimism -- --from-block 157056812 --through-block 157056911
+```
+
+Both endpoints are required and the end block must already be past the configured confirmation depth. The command writes spend and tier facts atomically, does not emit live tape notifications, and never creates or updates `ingest_cursor`. Re-running a completed range must report zero inserts. The public endpoint defaults to 250-block batches; a stronger provider can use `--batch-blocks N` or `OPTIMISM_BACKFILL_BATCH_BLOCKS`.
+
 For an independently repeatable, read-only parity audit, compare a finalized RPC window with every persisted normalized field:
 
 ```bash
@@ -65,7 +73,7 @@ An outside reviewer can pin the end of the range for a stable reproduction:
 npm run audit:optimism -- --blocks 1000 --through-block 157056911
 ```
 
-Configuration knobs are documented in `.env.example`: confirmation depth, block batch size, initial lookback, poll interval, reorg depth, and an optional explicit start block.
+Configuration knobs are documented in `.env.example`: confirmation depth, live and backfill batch sizes, initial lookback, poll interval, reorg depth, and an optional explicit start block.
 
 ## Scope boundary
 

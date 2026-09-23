@@ -20,6 +20,7 @@ interface IndexerConfig {
   startBlock?: number;
   replayBlocks: number;
   once: boolean;
+  maxBatches?: number;
 }
 
 function positiveInteger(value: string | undefined, fallback: number, name: string): number {
@@ -51,6 +52,9 @@ function config(environment: NodeJS.ProcessEnv = process.env): IndexerConfig {
     startBlock: optionalBlock(argument('--from-block') ?? environment.OPTIMISM_START_BLOCK, 'OPTIMISM_START_BLOCK'),
     replayBlocks: optionalBlock(argument('--replay-blocks'), '--replay-blocks') ?? 0,
     once: process.argv.includes('--once'),
+    maxBatches: argument('--max-batches') === undefined
+      ? undefined
+      : positiveInteger(argument('--max-batches'), 1, '--max-batches'),
   };
 }
 
@@ -87,6 +91,7 @@ async function main(): Promise<void> {
   const settings = config();
   const source = new OptimismSource({ rpcUrl: settings.rpcUrl, confirmations: settings.confirmations });
   const database = createDatabase(requireDatabaseUrl());
+  const finite = settings.once || settings.maxBatches !== undefined;
   const abort = new AbortController();
   const stop = () => abort.abort();
   process.once('SIGINT', stop);
@@ -95,11 +100,11 @@ async function main(): Promise<void> {
   try {
     let cursor = await getIngestCursor(database.db, source.id);
     if (!cursor) {
-      cursor = await retryRpc('Initial cursor', () => source.initialCursor(settings.initialLookbackBlocks, settings.startBlock), abort.signal, settings.once);
+      cursor = await retryRpc('Initial cursor', () => source.initialCursor(settings.initialLookbackBlocks, settings.startBlock), abort.signal, finite);
       process.stdout.write(`Initialized ${source.id} at block ${cursor.blockNumber}.\n`);
-    } else if (!(await retryRpc('Cursor validation', () => canonicalCursor(source, cursor as Cursor), abort.signal, settings.once))) {
+    } else if (!(await retryRpc('Cursor validation', () => canonicalCursor(source, cursor as Cursor), abort.signal, finite))) {
       const rewindBlock = Math.max(0, cursor.blockNumber - settings.reorgDepth);
-      const rewindCursor = { blockNumber: rewindBlock, blockHash: await retryRpc('Reorg cursor', () => source.getBlockHash(rewindBlock), abort.signal, settings.once) } satisfies Cursor;
+      const rewindCursor = { blockNumber: rewindBlock, blockHash: await retryRpc('Reorg cursor', () => source.getBlockHash(rewindBlock), abort.signal, finite) } satisfies Cursor;
       const removed = await rewindChainSource(database.db, source.id, rewindCursor);
       process.stdout.write(`Reorg detected at ${cursor.blockNumber}; rewound to ${rewindBlock} and removed ${removed.spendEvents} spend / ${removed.tierEvents} tier rows.\n`);
       cursor = rewindCursor;
@@ -113,11 +118,12 @@ async function main(): Promise<void> {
 
     if (!cursor) throw new Error('Indexer cursor was not initialized');
     let activeCursor: Cursor = cursor;
+    let completedBatches = 0;
 
     while (!abort.signal.aborted) {
       const startedAt = Date.now();
       const fetchBlocks = settings.replayBlocks > 0 ? Math.max(settings.batchBlocks, settings.replayBlocks) : settings.batchBlocks;
-      const batch = await retryRpc('Optimism fetch', () => source.fetch(activeCursor, fetchBlocks), abort.signal, settings.once);
+      const batch = await retryRpc('Optimism fetch', () => source.fetch(activeCursor, fetchBlocks), abort.signal, finite);
       const spendEvents = batch.events.flatMap((event) => source.normalize(event));
       const tierEvents = batch.events.flatMap((event) => source.normalizeTier(event));
       const inserted = await ingestChainBatch(database.db, source.id, spendEvents, tierEvents, batch.cursor);
@@ -135,7 +141,8 @@ async function main(): Promise<void> {
         elapsedMs: Date.now() - startedAt,
       })}\n`);
 
-      if (settings.once) break;
+      completedBatches += 1;
+      if (settings.once || (settings.maxBatches !== undefined && (completedBatches >= settings.maxBatches || activeCursor.blockNumber >= batch.head))) break;
       if (activeCursor.blockNumber >= batch.head) await delay(settings.pollMs, undefined, { signal: abort.signal }).catch(() => undefined);
     }
   } finally {
