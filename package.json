@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
-    "build:vercel": "NITRO_PRESET=vercel vite build",
+    "build:vercel": "NITRO_PRESET=vercel vite build && node scripts/prerender-vercel.mjs",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

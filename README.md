@@ -62,7 +62,7 @@ The one-time conversion commands for an existing PostgreSQL backfill are `npm ru
 
 ## GitHub + Vercel deployment
 
-The web app is built for Vercel with `npm run build:vercel`; the Nitro build emits Vercel Build Output API artifacts. The Vercel project should use the `Other` framework preset, keep the repository root as the project root, and use the committed `vercel.json` build command. It serves the UI and the checked-in snapshot without a database connection.
+The web app is built for Vercel with `npm run build:vercel`; the build emits a static entry page and Vercel Build Output API artifacts. The Vercel project should use the `Other` framework preset, keep the repository root as the project root, and use the committed `vercel.json` build command. The CDN serves the UI and the checked-in snapshot without a database connection or runtime server function.
 
 1. Create a public GitHub repository, push the application and an initial snapshot, and connect the repository to Vercel.
 2. Leave `DATABASE_URL`, `NEXT_PUBLIC_TAPE_API_URL`, and `NEXT_PUBLIC_TAPE_WS_URL` unset in Vercel. `DATABASE_URL` is only needed for the one-time conversion or optional local database workflows.
