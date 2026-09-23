@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.SITE_URL ?? 'https://cardtape.bimlabs.xyz'),
+  metadataBase: new URL('https://cardtape.bimlabs.xyz'),
   title: 'CARDTAPE — Neobank Campaign Impact',
   description: 'Compare observable neobank campaign activity against a clear baseline.',
   icons: {
